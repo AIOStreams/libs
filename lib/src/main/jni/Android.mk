@@ -91,8 +91,9 @@ LOCAL_SRC_FILES := \
 	event.cpp \
 	node.cpp \
 	thumbnail.cpp \
+	encoder.cpp \
 	mpv_context.cpp
 LOCAL_LDLIBS    := -llog -lGLESv3 -lEGL -latomic
-LOCAL_SHARED_LIBRARIES := swscale avcodec mpv
+LOCAL_SHARED_LIBRARIES := swscale avcodec avutil mpv
 
 include $(BUILD_SHARED_LIBRARY)
