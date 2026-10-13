@@ -36,9 +36,12 @@ args=(
 	# to keep the build lean we disable some feature quite aggressively:
 	# - devices: no practical use on Android
 	--disable-{encoders,devices}
-	# useful to taking screenshots
-	--enable-encoder=mjpeg,png
+	# useful to taking screenshots, and AC-3 to re-encode surround sound for S/PDIF
+	--enable-encoder=mjpeg,png,ac3
 )
+# The AC-3 encoder queues its frames, which configure doesn't select for it.
+grep -q '^ac3_encoder_select=.*audio_frame_queue' ../configure ||
+	sed -i 's/^ac3_encoder_select="/&audio_frame_queue /' ../configure
 ../configure "${args[@]}"
 
 make -j$cores
