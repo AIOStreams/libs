@@ -1,8 +1,9 @@
 name: build
 
 # Builds the AAR for arm64-v8a, armeabi-v7a and x86_64 from the sources
-# buildscripts/include/depinfo.sh pins, an ABI per job, then joins them. A push
-# to library also publishes it as a release, tagged with the date and commit.
+# buildscripts/include/depinfo.sh pins, an ABI per job, then joins them, and
+# FFmpeg's DLLs for Windows x86_64 and aarch64. A push to library also publishes
+# them as a release, tagged with the date and commit.
 on:
   push:
     branches: [library]
@@ -48,8 +49,39 @@ jobs:
           path: lib/build/outputs/aar/lib-release.aar
           compression-level: 0
 
-  aar:
-    needs: abi
+  windows:
+    name: build (windows ${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm ninja-build pkg-config
+          pipx install meson==1.12.1
+          . buildscripts/include/depinfo.sh
+          name="llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64"
+          curl -fsSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/$v_llvm_mingw/$name.tar.xz"
+          echo "$v_llvm_mingw_sha256  llvm-mingw.tar.xz" | sha256sum -c
+          tar -xf llvm-mingw.tar.xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name/bin" >>"$GITHUB_PATH"
+
+      - name: Build
+        run: ./buildscripts/windows-ffmpeg.sh ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffmpeg-windows-${{ matrix.arch }}
+          path: buildscripts/windows/ffmpeg-windows-${{ matrix.arch }}.zip
+          compression-level: 0
+
+  release:
+    needs: [abi, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -59,23 +91,29 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: aar-*
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ffmpeg-windows-*
+          path: out
+          merge-multiple: true
 
-      - name: Join the AARs
+      - name: Join the AARs and hash the release files
         run: |
           tag="$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
           echo "TAG=$tag" >>"$GITHUB_ENV"
           name="mpv-android-lib-$tag.aar"
-          mkdir joined out
+          mkdir -p joined out
           # They differ only in their native libraries.
           unzip -q aar-arm64/lib-release.aar -d joined
           for arch in armv7l x86_64; do unzip -q -o "aar-$arch/lib-release.aar" 'jni/*' -d joined; done
           (cd joined && zip -q -r -X "../out/$name" .)
           (cd out && sha256sum "$name" >"$name.sha256")
+          (cd out && for zip in ffmpeg-windows-*.zip; do sha256sum "$zip" >"$zip.sha256"; done)
           cat out/*.sha256
 
       - uses: actions/upload-artifact@v7
         with:
-          name: mpv-android-lib
+          name: release
           path: out
           compression-level: 0
 
