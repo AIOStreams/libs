@@ -14,6 +14,8 @@ If you're running on Debian/Ubuntu or RHEL/Fedora it will also install the neces
 ./download.sh
 ```
 
+It also applies the patches in `patches/<dependency>/` to the downloaded sources.
+
 If you already have the Android SDK installed you can symlink `android-sdk-linux` to your SDK root
 before running the script and the necessary SDK packages will still be installed.
 

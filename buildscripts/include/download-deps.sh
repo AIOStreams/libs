@@ -77,4 +77,11 @@ fi
 # dovi (libdovi, Dolby Vision RPU conversion)
 [ ! -d dovi ] && clone_at dovi https://github.com/quietvoid/dovi_tool $v_dovi
 
+# patches/<dependency>/*.patch, each applied once
+for p in ../patches/*/*.patch; do
+	[ -f "$p" ] || continue
+	d=$(basename "$(dirname "$p")")
+	patch -d $d -p1 -R -s -f --dry-run <"$p" >/dev/null || patch -d $d -p1 -N -s <"$p"
+done
+
 cd ..
