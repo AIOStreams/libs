@@ -8,6 +8,9 @@ v_ndk=r29
 v_ndk_n=29.0.14206865
 v_sdk_platform=35
 v_sdk_build_tools=35.0.0
+# windows-ffmpeg.sh's toolchain, and the SHA-256 of its Ubuntu x86_64 archive
+v_llvm_mingw=20261006
+v_llvm_mingw_sha256=5f9c6ed95b2d4bdb2869a488c5fd5857fbdabcf288a0aa3eb1da43f6a08d8ab4
 
 v_lua=5.2.4
 v_unibreak=6.1
