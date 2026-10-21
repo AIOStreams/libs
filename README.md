@@ -25,6 +25,7 @@ They apply in order, and none of them change what libass draws.
 | --- | --- |
 | `0001-parse-integers-without-strtoll.patch` | Integer tag values are parsed without `strtoll` |
 | `0002-strtod-short-decimals.patch` | Short decimal tag values are converted with one division |
+| `0003-skip-fribidi-for-ltr-paragraphs.patch` | Left-to-right paragraphs skip FriBidi |
 
 ## libmpv for Android
 

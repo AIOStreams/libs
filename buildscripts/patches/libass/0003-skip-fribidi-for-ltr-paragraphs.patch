@@ -1,0 +1,79 @@
+From 71a69ad66eb32025dc2eadc12b52ffcdd464e7ee Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Wed, 21 Oct 2026 22:50:16 +0100
+Subject: [PATCH] ass_shaper: skip FriBidi for left-to-right paragraphs
+
+A paragraph with no right-to-left, Arabic number or explicit directional
+characters, whose base direction is not right-to-left, has every level at 0.
+---
+ libass/ass_shaper.c | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/libass/ass_shaper.c b/libass/ass_shaper.c
+index d733d5d..c7e0b80 100644
+--- a/libass/ass_shaper.c
++++ b/libass/ass_shaper.c
+@@ -939,6 +939,40 @@ void ass_shaper_set_whole_text_layout(ASS_Shaper *shaper, bool enable)
+             WHOLE_TEXT_LAYOUT_IMPLICIT : WHOLE_TEXT_LAYOUT_OFF;
+ }
+ 
++/**
++ * \brief Whether FriBidi would leave every level of the paragraph at 0, from
++ * the types alone. Sets dir as FriBidi would.
++ */
++static bool levels_all_ltr(const FriBidiCharType *types, int len, FriBidiParType *dir)
++{
++    if (*dir != FRIBIDI_PAR_LTR && *dir != FRIBIDI_PAR_WLTR && *dir != FRIBIDI_PAR_ON)
++        return false;
++    bool strong = false;
++    for (int i = 0; i < len; i++) {
++        switch (types[i]) {
++        case FRIBIDI_TYPE_LTR:
++            strong = true;
++            break;
++        case FRIBIDI_TYPE_EN:
++        case FRIBIDI_TYPE_ES:
++        case FRIBIDI_TYPE_ET:
++        case FRIBIDI_TYPE_CS:
++        case FRIBIDI_TYPE_NSM:
++        case FRIBIDI_TYPE_BN:
++        case FRIBIDI_TYPE_BS:
++        case FRIBIDI_TYPE_SS:
++        case FRIBIDI_TYPE_WS:
++        case FRIBIDI_TYPE_ON:
++            break;
++        default:
++            return false;
++        }
++    }
++    if (strong)
++        *dir = FRIBIDI_PAR_LTR;
++    return true;
++}
++
+ /**
+  * \brief Shape an event's text. Calculates directional runs and shapes them.
+  * \param text_info event's text
+@@ -985,6 +1019,11 @@ bool ass_shaper_shape(ASS_Shaper *shaper, TextInfo *text_info)
+                 (!shaper->whole_text_layout &&
+                     (glyphs[i + 1].starts_new_run || glyphs[i].hspacing))) {
+             dir = shaper->base_direction;
++            if (levels_all_ltr(shaper->ctypes + last_break, i - last_break + 1, &dir)) {
++                memset(shaper->emblevels + last_break, 0,
++                       (i - last_break + 1) * sizeof(*shaper->emblevels));
++                ret = 1;
++            } else {
+ #ifdef USE_FRIBIDI_EX_API
+             FriBidiBracketType *btypes = NULL;
+             if (shaper->bidi_brackets)
+@@ -996,6 +1035,7 @@ bool ass_shaper_shape(ASS_Shaper *shaper, TextInfo *text_info)
+             ret = fribidi_get_par_embedding_levels(shaper->ctypes + last_break,
+                     i - last_break + 1, &dir, shaper->emblevels + last_break);
+ #endif
++            }
+             if (ret == 0)
+                 return false;
+             last_break = i + 1;
+-- 
+2.55.0.windows.5
+
