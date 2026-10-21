@@ -1,0 +1,108 @@
+From 40d0679af6f6201c2141833052bcb0529449fb04 Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Wed, 21 Oct 2026 23:00:51 +0100
+Subject: [PATCH] ass_shaper: keep sized HarfBuzz fonts per face
+
+Shaping made and destroyed a sub-font for every run on every frame.
+---
+ libass/ass_font.c   |  5 +++++
+ libass/ass_font.h   |  5 +++++
+ libass/ass_shaper.c | 16 +++++++++++++---
+ 3 files changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/libass/ass_font.c b/libass/ass_font.c
+index aa12ca1..ae1aa03 100644
+--- a/libass/ass_font.c
++++ b/libass/ass_font.c
+@@ -505,6 +505,8 @@ size_t ass_font_construct(void *key, void *value, void *priv)
+     font->library = render_priv->library;
+     font->ftlibrary = render_priv->ftlibrary;
+     font->n_faces = 0;
++    memset(font->sized_hb_fonts, 0, sizeof(font->sized_hb_fonts));
++    memset(font->next_sized_hb_font, 0, sizeof(font->next_sized_hb_font));
+     font->desc.family = desc->family;
+     font->desc.bold = desc->bold;
+     font->desc.italic = desc->italic;
+@@ -753,6 +755,9 @@ void ass_font_clear(ASS_Font *font)
+ {
+     int i;
+     for (i = 0; i < font->n_faces; ++i) {
++        for (int j = 0; j < ASS_FONT_SIZED_HB_FONTS; j++)
++            if (font->sized_hb_fonts[i][j])
++                hb_font_destroy(font->sized_hb_fonts[i][j]);
+         if (font->faces[i])
+             FT_Done_Face(font->faces[i]);
+         if (font->hb_fonts[i])
+diff --git a/libass/ass_font.h b/libass/ass_font.h
+index 2388249..e2352c3 100644
+--- a/libass/ass_font.h
++++ b/libass/ass_font.h
+@@ -39,6 +39,8 @@ typedef struct ass_font ASS_Font;
+ #define DECO_STRIKETHROUGH 2
+ #define DECO_ROTATE        4
+ 
++#define ASS_FONT_SIZED_HB_FONTS 4
++
+ struct ass_font {
+     ASS_FontDesc desc;
+     ASS_Library *library;
+@@ -46,6 +48,9 @@ struct ass_font {
+     int faces_uid[ASS_FONT_MAX_FACES];
+     FT_Face faces[ASS_FONT_MAX_FACES];
+     struct hb_font_t *hb_fonts[ASS_FONT_MAX_FACES];
++    struct hb_font_t *sized_hb_fonts[ASS_FONT_MAX_FACES][ASS_FONT_SIZED_HB_FONTS];
++    double sized_hb_font_sizes[ASS_FONT_MAX_FACES][ASS_FONT_SIZED_HB_FONTS];
++    int next_sized_hb_font[ASS_FONT_MAX_FACES];
+     int n_faces;
+ };
+ 
+diff --git a/libass/ass_shaper.c b/libass/ass_shaper.c
+index c7e0b80..050e68b 100644
+--- a/libass/ass_shaper.c
++++ b/libass/ass_shaper.c
+@@ -458,13 +458,18 @@ bool ass_create_hb_font(ASS_Font *font, int index)
+ }
+ 
+ /**
+- * \brief Create HarfBuzz sub-font for current face and size.
++ * \brief Get HarfBuzz sub-font for current face and size, kept by the font.
+  * \param info glyph cluster
+  * \return HarfBuzz font
+  */
+ static hb_font_t *get_hb_font(ASS_Shaper *shaper, GlyphInfo *info)
+ {
+     ASS_Font *font = info->font;
++    int face = info->face_index;
++    for (int i = 0; i < ASS_FONT_SIZED_HB_FONTS; i++)
++        if (font->sized_hb_fonts[face][i] &&
++                font->sized_hb_font_sizes[face][i] == info->font_size)
++            return font->sized_hb_fonts[face][i];
+ 
+     FaceSizeMetricsHashKey key = {
+         .font = info->font,
+@@ -492,6 +497,13 @@ static hb_font_t *get_hb_font(ASS_Shaper *shaper, GlyphInfo *info)
+ 
+     update_hb_size(hb_font, font->faces[info->face_index], m);
+ 
++    int slot = font->next_sized_hb_font[face];
++    font->next_sized_hb_font[face] = (slot + 1) % ASS_FONT_SIZED_HB_FONTS;
++    if (font->sized_hb_fonts[face][slot])
++        hb_font_destroy(font->sized_hb_fonts[face][slot]);
++    font->sized_hb_fonts[face][slot] = hb_font;
++    font->sized_hb_font_sizes[face][slot] = info->font_size;
++
+     return hb_font;
+ }
+ 
+@@ -717,8 +729,6 @@ static bool shape_harfbuzz(ASS_Shaper *shaper, GlyphInfo *glyphs, size_t len)
+         shape_harfbuzz_process_run(glyphs, buf,
+                 shaper->whole_text_layout ? 0 : offset - lead_context);
+         hb_buffer_reset(buf);
+-
+-        hb_font_destroy(font);
+     }
+ 
+     return true;
+-- 
+2.55.0.windows.5
+
