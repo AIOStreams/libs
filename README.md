@@ -24,6 +24,7 @@ They apply in order, and none of them change what libass draws.
 | Patch | Change |
 | --- | --- |
 | `0001-parse-integers-without-strtoll.patch` | Integer tag values are parsed without `strtoll` |
+| `0002-strtod-short-decimals.patch` | Short decimal tag values are converted with one division |
 
 ## libmpv for Android
 
