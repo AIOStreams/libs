@@ -27,6 +27,7 @@ They apply in order, and none of them change what libass draws.
 | `0002-strtod-short-decimals.patch` | Short decimal tag values are converted with one division |
 | `0003-skip-fribidi-for-ltr-paragraphs.patch` | Left-to-right paragraphs skip FriBidi |
 | `0004-sized-harfbuzz-fonts.patch` | Each face keeps its sized HarfBuzz fonts instead of making one for every run |
+| `0005-shaped-run-cache.patch` | HarfBuzz's result for each run of text is cached |
 
 ## libmpv for Android
 
