@@ -1,0 +1,60 @@
+From fb414874764b789ba9d6a71bba6411ff78d097d7 Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Thu, 22 Oct 2026 00:22:45 +0100
+Subject: [PATCH] ass_bitmap: shift bitmaps a row at a time
+
+The y shift walked the bitmap by columns. In rows both shifts read it in
+order and vectorize.
+---
+ libass/ass_bitmap.c | 30 ++++++++++++++++++------------
+ 1 file changed, 18 insertions(+), 12 deletions(-)
+
+diff --git a/libass/ass_bitmap.c b/libass/ass_bitmap.c
+index 41df5e1..afba163 100644
+--- a/libass/ass_bitmap.c
++++ b/libass/ass_bitmap.c
+@@ -238,23 +238,29 @@ void ass_shift_bitmap(Bitmap *bm, int shift_x, int shift_y)
+     ptrdiff_t s = bm->stride;
+     uint8_t *buf = bm->buffer;
+ 
+-    // Shift in x direction
+-    if (shift_x)
++    // Shift in x direction: each pixel passes the next one a share of its
++    // original value.
++    if (shift_x && w > 1)
+         for (int32_t y = 0; y < h; y++) {
+-            for (int32_t x = w - 1; x > 0; x--) {
+-                uint8_t b = buf[x + y * s - 1] * shift_x >> 6;
+-                buf[x + y * s - 1] -= b;
+-                buf[x + y * s] += b;
++            uint8_t *row = buf + y * s;
++            uint8_t carry = 0;
++            for (int32_t x = 0; x < w - 1; x++) {
++                uint8_t b = row[x] * shift_x >> 6;
++                row[x] = row[x] - b + carry;
++                carry = b;
+             }
++            row[w - 1] += carry;
+         }
+ 
+-    // Shift in y direction
++    // Shift in y direction, a row at a time so it vectorizes
+     if (shift_y)
+-        for (int32_t x = 0; x < w; x++) {
+-            for (int32_t y = h - 1; y > 0; y--) {
+-                uint8_t b = buf[x + y * s - s] * shift_y >> 6;
+-                buf[x + y * s - s] -= b;
+-                buf[x + y * s] += b;
++        for (int32_t y = h - 1; y > 0; y--) {
++            uint8_t *restrict dst = buf + y * s;
++            uint8_t *restrict src = dst - s;
++            for (int32_t x = 0; x < w; x++) {
++                uint8_t b = src[x] * shift_y >> 6;
++                src[x] -= b;
++                dst[x] += b;
+             }
+         }
+ }
+-- 
+2.55.0.windows.5
+
