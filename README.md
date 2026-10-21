@@ -17,6 +17,14 @@ The native libraries [AIOStreams](https://github.com/Viren070/AIOStreams)' apps 
 | `hevc-irap-missing-refs.patch` | Decoding that starts at an open-GOP keyframe no longer allocates and fills a frame for each of its references, which only skipped pictures use |
 | `libdav1d-skip-loop-filter.patch` | `skip_loop_filter` turns off dav1d's in-loop filters, as it does FFmpeg's own decoders' |
 
+## libass patches
+
+They apply in order, and none of them change what libass draws.
+
+| Patch | Change |
+| --- | --- |
+| `0001-parse-integers-without-strtoll.patch` | Integer tag values are parsed without `strtoll` |
+
 ## libmpv for Android
 
 A library version of [mpv-android](https://github.com/mpv-android/mpv-android), providing [libmpv](https://github.com/mpv-player/mpv) for Android applications. Initially made for [mpvKt](https://github.com/abdallahmehiz/mpvKt).
