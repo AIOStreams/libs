@@ -28,6 +28,7 @@ They apply in order, and none of them change what libass draws.
 | `0003-skip-fribidi-for-ltr-paragraphs.patch` | Left-to-right paragraphs skip FriBidi |
 | `0004-sized-harfbuzz-fonts.patch` | Each face keeps its sized HarfBuzz fonts instead of making one for every run |
 | `0005-shaped-run-cache.patch` | HarfBuzz's result for each run of text is cached |
+| `0006-scaled-cache-budget.patch` | The default bitmap cache shrinks with the frame: 192 MB at 4K, 48 MB at 1080p, at least 32 MB |
 
 ## libmpv for Android
 

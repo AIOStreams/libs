@@ -1,0 +1,103 @@
+From 9ce7ae2cf28f9d7193da2a76f10a6970dab1ad2a Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Thu, 22 Oct 2026 00:06:49 +0100
+Subject: [PATCH] ass_render: scale the default cache budget with the frame
+
+Bitmaps grow with the frame's area, so a default sized for 4K holds far
+more of them at smaller sizes, mostly ones that never come back.
+---
+ libass/ass.h            |  3 ++-
+ libass/ass_render.c     | 15 +++++++++++----
+ libass/ass_render.h     |  4 +++-
+ libass/ass_render_api.c |  6 ++----
+ 4 files changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/libass/ass.h b/libass/ass.h
+index 851ca7c..81ecec1 100644
+--- a/libass/ass.h
++++ b/libass/ass.h
+@@ -597,7 +597,8 @@ int ass_fonts_update(ASS_Renderer *priv);
+ 
+ /**
+  * \brief Set hard cache limits.  Do not set, or set to zero, for reasonable
+- * defaults.
++ * defaults.  The default bitmap cache size is for a 4K frame and shrinks with
++ * smaller frames, to no less than 32 MB.
+  *
+  * \param priv renderer handle
+  * \param glyph_max maximum number of cached glyphs
+diff --git a/libass/ass_render.c b/libass/ass_render.c
+index b083e55..685027f 100644
+--- a/libass/ass_render.c
++++ b/libass/ass_render.c
+@@ -150,8 +150,6 @@ ASS_Renderer *ass_renderer_init(ASS_Library *library)
+         goto fail;
+ 
+     priv->cache.glyph_max = GLYPH_CACHE_MAX;
+-    priv->cache.bitmap_max_size = BITMAP_CACHE_MAX_SIZE;
+-    priv->cache.composite_max_size = COMPOSITE_CACHE_MAX_SIZE;
+ 
+     if (!render_context_init(&priv->state, priv))
+         goto fail;
+@@ -3024,8 +3022,17 @@ ass_render_event(RenderContext *state, ASS_Event *event,
+  */
+ static void check_cache_limits(ASS_Renderer *priv, CacheStore *cache)
+ {
+-    ass_cache_cut(cache->composite_cache, cache->composite_max_size);
+-    ass_cache_cut(cache->bitmap_cache, cache->bitmap_max_size);
++    size_t bitmap_max = cache->bitmap_max_size, composite_max = cache->composite_max_size;
++    if (!bitmap_max) {
++        // Bitmaps grow with the frame's area, so a smaller frame fits as many in less memory.
++        double area = (double) priv->settings.frame_width * priv->settings.frame_height;
++        double scale = FFMINMAX(area / DEFAULT_CACHE_FRAME_AREA,
++                                (double) DEFAULT_CACHE_MIN_SIZE / (BITMAP_CACHE_MAX_SIZE + COMPOSITE_CACHE_MAX_SIZE), 1);
++        bitmap_max = BITMAP_CACHE_MAX_SIZE * scale;
++        composite_max = COMPOSITE_CACHE_MAX_SIZE * scale;
++    }
++    ass_cache_cut(cache->composite_cache, composite_max);
++    ass_cache_cut(cache->bitmap_cache, bitmap_max);
+     ass_cache_cut(cache->outline_cache, cache->glyph_max);
+     ass_cache_cut(cache->shape_cache, SHAPE_CACHE_MAX_SIZE);
+ }
+diff --git a/libass/ass_render.h b/libass/ass_render.h
+index 840d57f..c7de135 100644
+--- a/libass/ass_render.h
++++ b/libass/ass_render.h
+@@ -46,6 +46,8 @@
+ #define COMPOSITE_CACHE_RATIO 2
+ #define COMPOSITE_CACHE_MAX_SIZE (BITMAP_CACHE_MAX_SIZE / COMPOSITE_CACHE_RATIO)
+ #define SHAPE_CACHE_MAX_SIZE (2 * MEGABYTE)
++#define DEFAULT_CACHE_FRAME_AREA (3840 * 2160)
++#define DEFAULT_CACHE_MIN_SIZE (32 * MEGABYTE)
+ 
+ #define PARSED_FADE (1<<0)
+ #define PARSED_A    (1<<1)
+@@ -306,7 +308,7 @@ typedef struct {
+     Cache *metrics_cache;
+     Cache *shape_cache;
+     size_t glyph_max;
+-    size_t bitmap_max_size;
++    size_t bitmap_max_size;     // 0 = the default for the frame size
+     size_t composite_max_size;
+ } CacheStore;
+ 
+diff --git a/libass/ass_render_api.c b/libass/ass_render_api.c
+index b3ef75a..6e809f3 100644
+--- a/libass/ass_render_api.c
++++ b/libass/ass_render_api.c
+@@ -200,10 +200,8 @@ void ass_set_cache_limits(ASS_Renderer *render_priv, int glyph_max,
+         bitmap_cache = MEGABYTE * (size_t) bitmap_max;
+         composite_cache = bitmap_cache / (COMPOSITE_CACHE_RATIO + 1);
+         bitmap_cache -= composite_cache;
+-    } else {
+-        bitmap_cache = BITMAP_CACHE_MAX_SIZE;
+-        composite_cache = COMPOSITE_CACHE_MAX_SIZE;
+-    }
++    } else
++        bitmap_cache = composite_cache = 0;
+     render_priv->cache.bitmap_max_size = bitmap_cache;
+     render_priv->cache.composite_max_size = composite_cache;
+ }
+-- 
+2.55.0.windows.5
+
