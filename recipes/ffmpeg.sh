@@ -37,6 +37,8 @@ case $platform in
 			--extra-cflags="$(pkg-config --cflags dovi)" --extra-libs="$(pkg-config --libs --static dovi)"
 			# room for the packaging's install names
 			--extra-ldflags=-Wl,-headerpad_max_install_names
+			# make install can relink, which would put DESTDIR in the names
+			--install-name-dir=/usr/local/lib
 		)
 		;;
 esac
