@@ -31,6 +31,7 @@ They apply in order, and none of them change what libass draws.
 | `0006-shift-bitmap-rows.patch` | Shadow bitmaps are shifted a row at a time, which the compiler vectorizes |
 | `0007-shared-caches.patch` | The caches can be looked up from several threads at once, without a lock |
 | `0008-shared-fonts.patch` | Threads can share fonts: each font locks its FreeType faces, and glyph indices are cached per face without a lock |
+| `0009-serialized-logging.patch` | The message callback gets one message at a time |
 
 ## libmpv for Android
 

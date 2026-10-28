@@ -1,0 +1,72 @@
+From 5b580838e3df5fe65e7bcf481871c21d96ede95a Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Tue, 27 Oct 2026 20:45:24 +0000
+Subject: [PATCH] ass_utils: log one message at a time
+
+---
+ libass/ass_library.c | 5 ++++-
+ libass/ass_library.h | 2 ++
+ libass/ass_utils.c   | 2 ++
+ 3 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/libass/ass_library.c b/libass/ass_library.c
+index a27aada..369de04 100644
+--- a/libass/ass_library.c
++++ b/libass/ass_library.c
+@@ -45,8 +45,10 @@ static void ass_msg_handler(int level, const char *fmt, va_list va, void *data)
+ ASS_Library *ass_library_init(void)
+ {
+     ASS_Library* lib = calloc(1, sizeof(*lib));
+-    if (lib)
++    if (lib) {
+         lib->msg_callback = ass_msg_handler;
++        pthread_mutex_init(&lib->msg_lock, NULL);
++    }
+     #ifdef CONFIG_UNIBREAK
+     // libunibreak works without, but its docs suggest this improves performance
+     init_linebreak();
+@@ -60,6 +62,7 @@ void ass_library_done(ASS_Library *priv)
+         ass_set_fonts_dir(priv, NULL);
+         ass_set_style_overrides(priv, NULL);
+         ass_clear_fonts(priv);
++        pthread_mutex_destroy(&priv->msg_lock);
+         free(priv);
+     }
+ }
+diff --git a/libass/ass_library.h b/libass/ass_library.h
+index 0a97960..20a3a87 100644
+--- a/libass/ass_library.h
++++ b/libass/ass_library.h
+@@ -20,6 +20,7 @@
+ #define LIBASS_LIBRARY_H
+ 
+ #include <stdarg.h>
++#include <pthread.h>
+ 
+ #include "ass_filesystem.h"
+ 
+@@ -38,6 +39,7 @@ struct ass_library {
+     size_t num_fontdata;
+     void (*msg_callback)(int, const char *, va_list, void *);
+     void *msg_callback_data;
++    pthread_mutex_t msg_lock;   // rendering threads log one message at a time
+ };
+ 
+ char *ass_load_file(struct ass_library *library, const char *fname, FileNameSource hint, size_t *bufsize);
+diff --git a/libass/ass_utils.c b/libass/ass_utils.c
+index 01bb8a8..0bbe15f 100644
+--- a/libass/ass_utils.c
++++ b/libass/ass_utils.c
+@@ -118,7 +118,9 @@ void ass_msg(ASS_Library *priv, int lvl, const char *fmt, ...)
+ {
+     va_list va;
+     va_start(va, fmt);
++    pthread_mutex_lock(&priv->msg_lock);
+     priv->msg_callback(lvl, fmt, va, priv->msg_callback_data);
++    pthread_mutex_unlock(&priv->msg_lock);
+     va_end(va);
+ }
+ 
+-- 
+2.55.0.windows.5
+
