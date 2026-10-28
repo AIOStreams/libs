@@ -46,11 +46,25 @@ export host
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig"
 unset PKG_CONFIG_PATH
 
+# A library's licences in prefix/licenses/<name>, with those of the projects it vendors.
+collect_licenses () {
+	local dir to
+	rm -rf "$prefix_dir/licenses/$1"
+	for dir in "$root/deps/$1" "$root/deps/$1"/{third_party,3rdparty}/*/; do
+		[ -d "$dir" ] || continue
+		to="$prefix_dir/licenses/$1${dir#"$root/deps/$1"}"
+		mkdir -p "$to"
+		find "$dir" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
+			-exec cp {} "$to" \;
+		rmdir "$to" 2>/dev/null || true
+	done
+}
+
 inputs () {
 	local needs="dep_${1//-/_}[*]" pin dep
 	{
 		cat "$root/recipes/$1.sh" "$root/scripts/recipe.sh"
-		declare -f toolchain crossfile cmake_toolchain_file
+		declare -f toolchain crossfile cmake_toolchain_file collect_licenses
 		for pin in $(pins $1) v_sdk v_ndk v_ndk_n v_gas_preprocessor v_llvm_mingw; do echo "$pin=${!pin}"; done
 		for dep in ${!needs}; do cat "$prefix_dir/.built/$dep"; done
 	} | sha256 | cut -d' ' -f1
@@ -83,9 +97,7 @@ build () {
 	(cd "$dest" && find . -mindepth 1 \( -type f -o -type l \) ! -path ./usr ! -path ./local | sort) >"$dest.files"
 	(cd "$dest" && tr '\n' '\0' <"$dest.files" | tar -c --null -T - -f -) | (cd "$prefix_dir" && tar -xf -)
 	mkdir -p "$prefix_dir/.built" && mv "$dest.files" "$stamp.files" && rm -rf "$dest"
-	rm -rf "$prefix_dir/licenses/$name" && mkdir -p "$prefix_dir/licenses/$name"
-	find "$root/deps/$name" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
-		-exec cp {} "$prefix_dir/licenses/$name/" \;
+	collect_licenses $name
 	inputs $name >"$stamp"
 }
 

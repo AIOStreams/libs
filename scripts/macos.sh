@@ -59,5 +59,6 @@ package () (
 		mpv.mpv_terminate_destroy(handle)
 	PY
 	cp -r "$prefix_dir/licenses" "$files/licenses"
+	license_index "$files"
 	zipdir "$root/out/libmpv-macos-$arch.zip" "$files"
 )

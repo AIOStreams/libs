@@ -90,3 +90,25 @@ zipdir () {
 		        z.write(os.path.join(top, name), name)
 	PY
 }
+
+# <folder>/licenses/index.json, which the apps list licences from.
+license_index () {
+	local name pin
+	for name in $(ls "$1/licenses"); do
+		[ -d "$1/licenses/$name" ] || continue
+		printf %s "$name"
+		for pin in $(pins $name); do printf '\t%s=%s' $pin "${!pin}"; done
+		echo
+	done | python3 -c '
+import json, os, sys
+top = sys.argv[1]
+libraries = []
+for line in sys.stdin.read().splitlines():
+    name, *pins = line.split("\t")
+    folder = os.path.join(top, name)
+    files = sorted(os.path.relpath(os.path.join(d, f), folder).replace(os.sep, "/") for d, _, fs in os.walk(folder) for f in fs)
+    libraries.append({"name": name, "pins": dict(p.split("=", 1) for p in pins), "files": files})
+with open(os.path.join(top, "index.json"), "w") as out:
+    json.dump({"libraries": libraries}, out, indent=1)
+' "$1/licenses"
+}

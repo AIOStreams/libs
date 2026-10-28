@@ -73,6 +73,9 @@ package () (
 	trap 'mv $utils.orig $utils' EXIT
 	${SED:-sed} -i -e "s/%MPV_VERSION%/${v_mpv::9}/" -e "s/%LIBPLACEBO_VERSION%/${v_libplacebo::9}/" \
 		-e "s/%FFMPEG_VERSION%/${v_ffmpeg::9}/" -e "s/%DATE%/$(LC_ALL=C date -u '+%b %e %Y %T')/" $utils
+	rm -rf lib/src/main/assets/licenses
+	cp -r "$prefix_dir/licenses" lib/src/main/assets/licenses
+	license_index lib/src/main/assets
 	ndk-build -C lib/src/main -j$cores
 	./gradlew :lib:assembleRelease
 	cp lib/build/outputs/aar/lib-release.aar "$root/out/libmpv-android.aar"

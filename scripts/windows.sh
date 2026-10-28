@@ -41,5 +41,6 @@ package () (
 		[ -f "$prefix_dir/bin/$dll" ] && $STRIP -o "$files/$dll" "$prefix_dir/bin/$dll"
 	done
 	cp -r "$prefix_dir/licenses" "$files/licenses"
+	license_index "$files"
 	zipdir "$root/out/libmpv-windows-$arch.zip" "$files"
 )
