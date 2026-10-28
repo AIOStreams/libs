@@ -81,6 +81,9 @@ jobs:
         with:
           path: built
 
+      - name: Pack libass's source
+        run: ./pack-source.sh libass
+
       - name: Join the AARs and hash the files
         run: |
           mkdir -p out joined
