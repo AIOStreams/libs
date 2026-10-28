@@ -53,7 +53,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: prefix/${{ matrix.platform }}-${{ matrix.arch }}
-          key: ${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('sources.sh', 'build.sh', 'scripts/**', 'recipes/**', 'patches/**') }}
+          key: ${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('sources.sh', 'build.sh', 'scripts/**', 'recipes/**') }}
           restore-keys: ${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build
@@ -80,9 +80,6 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: built
-
-      - name: Pack libass's source
-        run: ./pack-source.sh libass
 
       - name: Join the AARs and hash the files
         run: |
