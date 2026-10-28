@@ -23,7 +23,7 @@ v_libxml2=2.13.5
 # Commits, so each build gets exactly these sources
 v_dav1d=54706fc6bc0cdecab7e9593974a4039cc038fca7 # 1.5.4
 v_ffmpeg=7ef5a794c42abcb4a62e1ab22f4ae3ce40aee729
-v_libass=4a05d8127f525943ebf45fdc6497c9e665947f0d # 0.17.5
+v_libass=f61db567e6593df3470e91594bcd4ad2d0473aff # master, after 0.17.5
 v_libplacebo=0d043c7f6f79cd3687c023454bdacbe615e4d96f
 v_mpv=36abaa32d00a7229ee206aae12dc0e97e7962dca
 v_dovi=d1abe0e27ff2c7ab3339614d06db9f8a058af6b2 # libdovi 3.4.0
