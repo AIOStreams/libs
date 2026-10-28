@@ -4,8 +4,9 @@
 
 if [[ "$OSTYPE" == darwin* ]]; then
 	cores=${cores:-$(sysctl -n hw.ncpu)}
-	# Several builds rely on GNU's sed and install.
-	export SED=gsed INSTALL=ginstall
+	# Several builds rely on GNU's sed and install; autoconf takes a bare INSTALL as a path
+	# inside the source.
+	export SED=gsed INSTALL=$(command -v ginstall)
 else
 	cores=${cores:-$(nproc)}
 fi
@@ -24,6 +25,13 @@ download () {
 	mv "$1.part" "$1"
 }
 
+# A command and its arguments as a meson list.
+meson_list () {
+	local word list=
+	for word in $1; do list+="${list:+, }'$word'"; done
+	echo "[$list]"
+}
+
 # meson's cross file for the prefix: <system> <cpu family> <cpu> [more [binaries] lines]
 crossfile () {
 	cat >"$crossfile.tmp" <<-EOF
@@ -33,8 +41,9 @@ crossfile () {
 		wrap_mode = 'nodownload'
 		prefix = '/usr/local'
 		[binaries]
-		c = '$CC'
-		cpp = '$CXX'
+		c = $(meson_list "$CC")
+		cpp = $(meson_list "$CXX")
+		objc = $(meson_list "$CC")
 		ar = '$AR'
 		nm = '$NM'
 		strip = '$STRIP'
@@ -50,13 +59,18 @@ crossfile () {
 	if cmp -s "$crossfile.tmp" "$crossfile"; then rm "$crossfile.tmp"; else mv "$crossfile.tmp" "$crossfile"; fi
 }
 
+# What follows a command: <command and arguments>
+flags_of () { if [[ $1 == *' '* ]]; then echo "${1#* }"; fi; }
+
 # CMake's toolchain file for the prefix: <system> <processor>
 cmake_toolchain_file () {
 	cat >"$cmake_toolchain" <<-EOF
 		set(CMAKE_SYSTEM_NAME $1)
 		set(CMAKE_SYSTEM_PROCESSOR $2)
-		set(CMAKE_C_COMPILER $CC)
-		set(CMAKE_CXX_COMPILER $CXX)
+		set(CMAKE_C_COMPILER ${CC%% *})
+		set(CMAKE_CXX_COMPILER ${CXX%% *})
+		set(CMAKE_C_FLAGS_INIT "$(flags_of "$CC")")
+		set(CMAKE_CXX_FLAGS_INIT "$(flags_of "$CXX")")
 		set(CMAKE_RC_COMPILER ${RC:-})
 		set(CMAKE_AR $(command -v $AR))
 		set(CMAKE_RANLIB $(command -v $RANLIB))

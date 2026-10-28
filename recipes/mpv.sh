@@ -9,6 +9,16 @@ case $platform in
 			-D{c,cpp}_args=-I$prefix_dir/include -D{c,cpp}_link_args="$link"
 		)
 		;;
+	macos)
+		args=(
+			-Dlua=luajit -D{iconv,uchardet,lcms2,vulkan,moltenvk,gl,plain-gl,gl-cocoa,cocoa}=enabled
+			-D{coreaudio,avfoundation,vo-avfoundation,videotoolbox-gl,videotoolbox-pl}=enabled
+			-D{macos-touchbar,macos-media-player}=disabled
+			-Dswift-flags="-target $arch-apple-macos$MACOSX_DEPLOYMENT_TARGET"
+			# room for the packaging's install names
+			-D{c,objc}_link_args=-Wl,-headerpad_max_install_names
+		)
+		;;
 esac
 meson_setup --default-library shared -Dlibmpv=true -Dcplayer=false -Dmanpage-build=disabled "${args[@]}"
 ninja -C $build_dir -j$cores

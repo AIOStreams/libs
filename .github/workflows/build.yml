@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     name: ${{ matrix.platform }} (${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
     timeout-minutes: 150
     strategy:
       fail-fast: false
@@ -25,13 +25,21 @@ jobs:
           - { platform: android, arch: x86_64 }
           - { platform: windows, arch: x86_64 }
           - { platform: windows, arch: aarch64 }
+          - { platform: macos, arch: arm64 }
+          - { platform: macos, arch: x86_64 }
     steps:
       - uses: actions/checkout@v7
 
       - name: Install the build tools
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool pkg-config ninja-build nasm
+          pipx install meson==1.12.1
+      - name: Install the build tools
+        if: runner.os == 'macOS'
+        run: |
+          brew install autoconf automake libtool pkg-config ninja nasm gnu-sed coreutils cargo-c
           pipx install meson==1.12.1
 
       - if: matrix.platform == 'android'
@@ -80,7 +88,7 @@ jobs:
           unzip -q built/android-arm64/libmpv-android.aar -d joined
           for arch in armv7l x86_64; do unzip -q -o built/android-$arch/libmpv-android.aar 'jni/*' -d joined; done
           (cd joined && zip -q -r -X ../out/libmpv-android.aar .)
-          cp built/windows-*/*.zip out/
+          cp built/{windows,macos}-*/*.zip out/
           (cd out && sha256sum * | tee SHA256SUMS)
 
       - uses: actions/upload-artifact@v7

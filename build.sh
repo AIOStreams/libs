@@ -61,14 +61,15 @@ inputs () {
 	} | sha256 | cut -d' ' -f1
 }
 
-declare -A built
+# What this run has built, as a list: macOS's bash 3.2 has no associative arrays.
+built=" "
 build () {
 	local name=$1 dep needs="dep_${1//-/_}[*]"
-	[ -n "${built[$name]}" ] && return
+	[[ $built == *" $name "* ]] && return
 	if [ $nodeps -eq 0 ]; then
 		for dep in ${!needs}; do build $dep; done
 	fi
-	built[$name]=1
+	built+="$name "
 	local stamp="$prefix_dir/.built/$name"
 	if [ $clean -eq 0 ] && [ "$(cat "$stamp" 2>/dev/null)" = "$(inputs $name)" ]; then
 		msg "$name for $platform $arch is up to date"
