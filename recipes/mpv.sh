@@ -6,4 +6,4 @@ if [ -f $build_dir/libmpv.a ]; then
 	rm -rf $build_dir
 	exec bash -e -c '. "$root/scripts/recipe.sh"; . "$0"' "$0"
 fi
-DESTDIR="$prefix_dir" ninja -C $build_dir install
+DESTDIR="$dest" ninja -C $build_dir install

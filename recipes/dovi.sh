@@ -11,4 +11,4 @@ export CC_${target//-/_}="$linker" AR_${target//-/_}=$AR
 cd dolby_vision
 cargo rustc --release --locked --features capi --target $target --crate-type cdylib -- \
 	-C panic=abort -C link-arg=-Wl,-soname,libdovi.so -C link-arg=-Wl,-z,max-page-size=16384
-install -D target/$target/release/libdolby_vision.so "$prefix_dir/lib/libdovi.so"
+install -D target/$target/release/libdolby_vision.so "$dest/lib/libdovi.so"

@@ -37,6 +37,7 @@ export root platform arch cores
 export prefix_dir="$root/prefix/$platform-$arch"
 export build_dir=_build-$platform-$arch
 export crossfile="$prefix_dir/crossfile.txt"
+export dest="$root/prefix/.dest-$platform-$arch"
 mkdir -p "$prefix_dir" "$root/out"
 # Everything installs to /usr/local in the prefix, which these make the prefix itself.
 [ -e "$prefix_dir/usr" ] || ln -s . "$prefix_dir/usr"
@@ -47,14 +48,14 @@ export host
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig"
 unset PKG_CONFIG_PATH
 
-# What a library's build depends on: its recipe, pin and patches, the platform, the
-# toolchains, and what it was built with.
+# What a library's build depends on: its recipe, pin and patches, the platform's toolchain,
+# and what it was built with.
 inputs () {
-	local pin=v_$1 needs="dep_$1[*]" dep
-	[ $1 = freetype2 ] && pin=v_freetype
+	local needs="dep_${1//-/_}[*]" pin dep
 	{
-		cat "$root/recipes/$1.sh" "$root/scripts/"{$platform,common,recipe}.sh
-		grep "^$pin=\|^v_\(sdk\|ndk\|gas_preprocessor\|llvm_mingw\)" "$root/sources.sh"
+		cat "$root/recipes/$1.sh" "$root/scripts/recipe.sh"
+		declare -f toolchain crossfile
+		for pin in $(pins $1) v_sdk v_ndk v_ndk_n v_gas_preprocessor v_llvm_mingw; do echo "$pin=${!pin}"; done
 		cat "$root/patches/$1"/*.patch 2>/dev/null || true
 		for dep in ${!needs}; do cat "$prefix_dir/.built/$dep"; done
 	} | sha256 | cut -d' ' -f1
@@ -62,7 +63,7 @@ inputs () {
 
 declare -A built
 build () {
-	local name=$1 dep needs="dep_$1[*]"
+	local name=$1 dep needs="dep_${1//-/_}[*]"
 	[ -n "${built[$name]}" ] && return
 	if [ $nodeps -eq 0 ]; then
 		for dep in ${!needs}; do build $dep; done
@@ -77,10 +78,19 @@ build () {
 	msg "Building $name for $platform $arch..."
 	rm -f "$stamp"
 	[ $clean -eq 1 ] && rm -rf "$root/deps/$name/$build_dir"
+	# It installs into $dest, flattened like the prefix, then moves in over what it installed
+	# before, so nothing it no longer installs stays behind.
+	rm -rf "$dest" && mkdir -p "$dest" && ln -s . "$dest/usr" && ln -s . "$dest/local"
 	(cd "$root/deps/$name" && bash -e -c '. "$root/scripts/recipe.sh"; . "$0"' "$root/recipes/$name.sh")
+	if [ -f "$stamp.files" ]; then
+		(cd "$prefix_dir" && tr '\n' '\0' <"$stamp.files" | xargs -0 rm -f)
+	fi
+	(cd "$dest" && find . -mindepth 1 \( -type f -o -type l \) ! -path ./usr ! -path ./local | sort) >"$dest.files"
+	(cd "$dest" && tr '\n' '\0' <"$dest.files" | tar -c --null -T - -f -) | (cd "$prefix_dir" && tar -xf -)
+	mkdir -p "$prefix_dir/.built" && mv "$dest.files" "$stamp.files" && rm -rf "$dest"
 	# Its licence, for the packages.
-	rm -rf "$prefix_dir/licenses/$name" && mkdir -p "$prefix_dir/licenses/$name" "$prefix_dir/.built"
-	find "$root/deps/$name" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICENSE*' -o -iname 'COPYRIGHT*' \) \
+	rm -rf "$prefix_dir/licenses/$name" && mkdir -p "$prefix_dir/licenses/$name"
+	find "$root/deps/$name" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
 		-exec cp {} "$prefix_dir/licenses/$name/" \;
 	inputs $name >"$stamp"
 }

@@ -33,4 +33,4 @@ case $platform in
 esac
 ../configure "${args[@]}"
 make -j$cores
-make DESTDIR="$prefix_dir" install
+make DESTDIR="$dest" install

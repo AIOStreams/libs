@@ -1,5 +1,5 @@
 # What recipes/ use; build.sh runs each in deps/<name> with this sourced. Each builds in
-# $build_dir with the given options and installs to /usr/local in $prefix_dir.
+# $build_dir with the given options and installs to /usr/local in $dest.
 
 meson_setup () (
 	unset CC CXX # meson reads these as the build machine's
@@ -14,19 +14,12 @@ meson_setup () (
 meson_build () {
 	meson_setup "$@"
 	ninja -C "$build_dir" -j$cores
-	DESTDIR="$prefix_dir" ninja -C "$build_dir" install
-}
-
-cmake_build () {
-	cmake -S . -B "$build_dir" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$cmake_toolchain" -DCMAKE_BUILD_TYPE=Release \
-		-DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=OFF "$@"
-	ninja -C "$build_dir" -j$cores
-	DESTDIR="$prefix_dir" ninja -C "$build_dir" install
+	DESTDIR="$dest" ninja -C "$build_dir" install
 }
 
 configure_build () (
 	mkdir -p "$build_dir" && cd "$build_dir"
 	../configure --host=$host "$@"
 	make -j$cores
-	make DESTDIR="$prefix_dir" install
+	make DESTDIR="$dest" install
 )

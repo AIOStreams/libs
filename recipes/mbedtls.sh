@@ -6,4 +6,4 @@ else
 	./scripts/config.py set MBEDTLS_AESNI_C
 fi
 make -j$cores no_test
-make DESTDIR="$prefix_dir" install
+make DESTDIR="$dest" install

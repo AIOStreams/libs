@@ -3,4 +3,4 @@
 make clean || true
 ./configure --host=$host --without-python --without-iconv
 make -j$cores
-make DESTDIR="$prefix_dir" install
+make DESTDIR="$dest" install

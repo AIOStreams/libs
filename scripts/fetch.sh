@@ -28,6 +28,15 @@ apply_patches () {
 
 fetch () (
 	mkdir -p "$root/deps" && cd "$root/deps"
+	# A source patched with anything but the start of today's patches starts over.
+	local p patches=
+	for p in "$root/patches/$1"/*.patch; do
+		[ -f "$p" ] && patches+="$(basename "$p") $(sha256 <"$p" | cut -d' ' -f1)"$'\n'
+	done
+	if [ -f "$1/.patches" ] && [[ "$patches" != "$(cat "$1/.patches")"$'\n'* ]]; then
+		msg "$1's patches changed"
+		rm -rf "$1"
+	fi
 	if [ ! -d "$1" ]; then
 		msg "Fetching $1..."
 		# Into a folder of its own first, so an interrupted download starts over.
@@ -53,3 +62,11 @@ fetch () (
 	fi
 	apply_patches "$1"
 )
+
+# The pins a library's source comes from.
+pins () {
+	case $1 in
+		freetype2) echo v_freetype ;;
+		*) echo v_${1//-/_} ;;
+	esac
+}
