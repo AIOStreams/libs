@@ -1,11 +1,14 @@
-.gdb_history
-bin
-gen
-libs
-obj
+# Sources, toolchains, builds and packages
+/deps/
+/sdk/
+/prefix/
+/out/
+
+# Android
 .gradle
 .idea
-**/*.iml
+*.iml
 build
 local.properties
-*~
+/android/lib/src/main/libs/
+/android/lib/src/main/obj/

@@ -1,9 +1,9 @@
 name: build
 
-# Builds the AAR for arm64-v8a, armeabi-v7a and x86_64 from the sources
-# buildscripts/include/depinfo.sh pins, an ABI per job, then joins them, and
-# FFmpeg's DLLs for Windows x86_64 and aarch64. A push to library also publishes
-# them as a release, tagged with the date and commit.
+# Builds the AAR for arm64-v8a, armeabi-v7a and x86_64 from the sources sources.sh
+# pins, an ABI per job, then joins them, and FFmpeg's DLLs for Windows x86_64 and
+# aarch64. A push to library also publishes them as a release, tagged with the date
+# and commit.
 on:
   push:
     branches: [library]
@@ -34,19 +34,16 @@ jobs:
           pipx install meson==1.12.1
 
       - name: Build
-        working-directory: buildscripts
         env:
-          IN_CI: 1
           GRADLE_OPTS: -Xmx4G
         run: |
-          unset ANDROID_SDK_ROOT
-          ./download.sh >/dev/null
-          ./buildall.sh --arch ${{ matrix.arch }}
+          unset ANDROID_SDK_ROOT ANDROID_HOME
+          ./build.sh android ${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v7
         with:
           name: aar-${{ matrix.arch }}
-          path: lib/build/outputs/aar/lib-release.aar
+          path: out/libmpv-android.aar
           compression-level: 0
 
   windows:
@@ -64,20 +61,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm ninja-build pkg-config
           pipx install meson==1.12.1
-          . buildscripts/include/depinfo.sh
-          name="llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64"
-          curl -fsSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/$v_llvm_mingw/$name.tar.xz"
-          echo "$v_llvm_mingw_sha256  llvm-mingw.tar.xz" | sha256sum -c
-          tar -xf llvm-mingw.tar.xz -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/$name/bin" >>"$GITHUB_PATH"
 
       - name: Build
-        run: ./buildscripts/windows-ffmpeg.sh ${{ matrix.arch }}
+        run: ./build.sh windows ${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-windows-${{ matrix.arch }}
-          path: buildscripts/windows/ffmpeg-windows-${{ matrix.arch }}.zip
+          path: out/ffmpeg-windows-${{ matrix.arch }}.zip
           compression-level: 0
 
   release:
@@ -104,8 +95,8 @@ jobs:
           name="mpv-android-lib-$tag.aar"
           mkdir -p joined out
           # They differ only in their native libraries.
-          unzip -q aar-arm64/lib-release.aar -d joined
-          for arch in armv7l x86_64; do unzip -q -o "aar-$arch/lib-release.aar" 'jni/*' -d joined; done
+          unzip -q aar-arm64/libmpv-android.aar -d joined
+          for arch in armv7l x86_64; do unzip -q -o "aar-$arch/libmpv-android.aar" 'jni/*' -d joined; done
           (cd joined && zip -q -r -X "../out/$name" .)
           (cd out && sha256sum "$name" >"$name.sha256")
           (cd out && for zip in ffmpeg-windows-*.zip; do sha256sum "$zip" >"$zip.sha256"; done)
@@ -125,7 +116,7 @@ jobs:
           {
             echo 'Built from these sources:'
             echo
-            sed -n 's/^v_\([a-z0-9_]*\)=\(.*\)$/- \1: \2/p' buildscripts/include/depinfo.sh
+            sed -n 's/^v_\([a-z0-9_]*\)=\([^ ]*\).*$/- \1: \2/p' sources.sh
             echo
             echo 'SHA-256:'
             echo
