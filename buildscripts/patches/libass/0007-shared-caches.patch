@@ -1,0 +1,1004 @@
+From fb94835eb8d9e07200466a0e06da916ae58f1f6a Mon Sep 17 00:00:00 2001
+From: Viren070 <viren070@protonmail.com>
+Date: Tue, 27 Oct 2026 20:45:23 +0000
+Subject: [PATCH] ass_cache: share caches between threads
+
+Lookups take no lock: a bucket's chain only grows while they run, with
+new items going in at its head by compare-and-swap, and a thread that
+finds an item another is still constructing waits for it. Each thread
+records the items it uses in its own client, which ass_cache_flush()
+moves to the back of the eviction order once the frame is done, and
+items leave the cache only between frames. Destructors are split into
+key and value ones, so a thread that loses the race to insert a key can
+free its copy.
+---
+ Makefile.am         |   2 +-
+ configure.ac        |   5 +
+ libass/ass_cache.c  | 401 ++++++++++++++++++++++++++++++--------------
+ libass/ass_cache.h  |  16 +-
+ libass/ass_font.c   |   5 +-
+ libass/ass_font.h   |   2 +-
+ libass/ass_parse.c  |   2 +-
+ libass/ass_render.c |  24 ++-
+ libass/ass_render.h |   1 +
+ libass/ass_shaper.c |  14 +-
+ libass/ass_shaper.h |   2 +-
+ meson.build         |   3 +-
+ 12 files changed, 325 insertions(+), 152 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 2287369..47d4c37 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -11,7 +11,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/libass
+ # non-POSIX interfaces even if their respective feature macro is set too.
+ # However, POSIX interfaces are usually implicitly enabled
+ # with other feature macros, thus omit the POSIX one.
+-AM_CFLAGS = -std=gnu99 -D_GNU_SOURCE -D_XPLATFORM_SOURCE
++AM_CFLAGS = -std=gnu11 -D_GNU_SOURCE -D_XPLATFORM_SOURCE
+ 
+ EXTRA_DIST = libass.pc.in Changelog MAINTAINERS RELEASEVERSION ltnasm.sh
+ 
+diff --git a/configure.ac b/configure.ac
+index 27676b3..c6220f4 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -89,6 +89,11 @@ AC_SEARCH_LIBS([lrint], [m], [
+ ], [
+     AC_MSG_ERROR([Unable to locate math functions!])
+ ])
++AC_SEARCH_LIBS([pthread_create], [pthread], [
++    # noop
++], [
++    AC_MSG_ERROR([Unable to locate pthreads!])
++])
+ pkg_libs="$LIBS"
+ 
+ ## Check for libraries via pkg-config and add to pkg_requires as needed
+diff --git a/libass/ass_cache.c b/libass/ass_cache.c
+index fd98169..0948b61 100644
+--- a/libass/ass_cache.c
++++ b/libass/ass_cache.c
+@@ -24,6 +24,8 @@
+ #include <ft2build.h>
+ #include FT_OUTLINE_H
+ #include <assert.h>
++#include <pthread.h>
++#include <stdatomic.h>
+ 
+ #include "ass_utils.h"
+ #include "ass_font.h"
+@@ -61,7 +63,13 @@ static bool font_key_move(void *dst, void *src)
+     return d->family.str;
+ }
+ 
+-static void font_destruct(void *key, void *value)
++static void font_key_destruct(void *key)
++{
++    ASS_FontDesc *k = key;
++    free((char *) k->family.str);
++}
++
++static void font_destruct(void *value)
+ {
+     ass_font_clear(value);
+ }
+@@ -73,7 +81,8 @@ const CacheDesc font_cache_desc = {
+     .compare_func = font_compare,
+     .key_move_func = font_key_move,
+     .construct_func = ass_font_construct,
+-    .destruct_func = font_destruct,
++    .key_destruct_func = font_key_destruct,
++    .value_destruct_func = font_destruct,
+     .key_size = sizeof(ASS_FontDesc),
+     .value_size = sizeof(ASS_Font)
+ };
+@@ -90,13 +99,17 @@ static bool bitmap_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void bitmap_destruct(void *key, void *value)
++static void bitmap_key_destruct(void *key)
+ {
+     BitmapHashKey *k = key;
+-    ass_free_bitmap(value);
+     ass_cache_dec_ref(k->outline);
+ }
+ 
++static void bitmap_destruct(void *value)
++{
++    ass_free_bitmap(value);
++}
++
+ size_t ass_bitmap_construct(void *key, void *value, void *priv);
+ 
+ const CacheDesc bitmap_cache_desc = {
+@@ -104,7 +117,8 @@ const CacheDesc bitmap_cache_desc = {
+     .compare_func = bitmap_compare,
+     .key_move_func = bitmap_key_move,
+     .construct_func = ass_bitmap_construct,
+-    .destruct_func = bitmap_destruct,
++    .key_destruct_func = bitmap_key_destruct,
++    .value_destruct_func = bitmap_destruct,
+     .key_size = sizeof(BitmapHashKey),
+     .value_size = sizeof(Bitmap)
+ };
+@@ -150,13 +164,9 @@ static bool composite_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void composite_destruct(void *key, void *value)
++static void composite_key_destruct(void *key)
+ {
+-    CompositeHashValue *v = value;
+     CompositeHashKey *k = key;
+-    ass_free_bitmap(&v->bm);
+-    ass_free_bitmap(&v->bm_o);
+-    ass_free_bitmap(&v->bm_s);
+     for (size_t i = 0; i < k->bitmap_count; i++) {
+         ass_cache_dec_ref(k->bitmaps[i].bm);
+         ass_cache_dec_ref(k->bitmaps[i].bm_o);
+@@ -164,6 +174,14 @@ static void composite_destruct(void *key, void *value)
+     free(k->bitmaps);
+ }
+ 
++static void composite_destruct(void *value)
++{
++    CompositeHashValue *v = value;
++    ass_free_bitmap(&v->bm);
++    ass_free_bitmap(&v->bm_o);
++    ass_free_bitmap(&v->bm_s);
++}
++
+ size_t ass_composite_construct(void *key, void *value, void *priv);
+ 
+ const CacheDesc composite_cache_desc = {
+@@ -171,7 +189,8 @@ const CacheDesc composite_cache_desc = {
+     .compare_func = composite_compare,
+     .key_move_func = composite_key_move,
+     .construct_func = ass_composite_construct,
+-    .destruct_func = composite_destruct,
++    .key_destruct_func = composite_key_destruct,
++    .value_destruct_func = composite_destruct,
+     .key_size = sizeof(CompositeHashKey),
+     .value_size = sizeof(CompositeHashValue)
+ };
+@@ -229,12 +248,9 @@ static bool outline_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void outline_destruct(void *key, void *value)
++static void outline_key_destruct(void *key)
+ {
+-    OutlineHashValue *v = value;
+     OutlineHashKey *k = key;
+-    ass_outline_free(&v->outline[0]);
+-    ass_outline_free(&v->outline[1]);
+     switch (k->type) {
+     case OUTLINE_GLYPH:
+         ass_cache_dec_ref(k->u.glyph.font);
+@@ -250,6 +266,13 @@ static void outline_destruct(void *key, void *value)
+     }
+ }
+ 
++static void outline_destruct(void *value)
++{
++    OutlineHashValue *v = value;
++    ass_outline_free(&v->outline[0]);
++    ass_outline_free(&v->outline[1]);
++}
++
+ size_t ass_outline_construct(void *key, void *value, void *priv);
+ 
+ const CacheDesc outline_cache_desc = {
+@@ -257,7 +280,8 @@ const CacheDesc outline_cache_desc = {
+     .compare_func = outline_compare,
+     .key_move_func = outline_key_move,
+     .construct_func = ass_outline_construct,
+-    .destruct_func = outline_destruct,
++    .key_destruct_func = outline_key_destruct,
++    .value_destruct_func = outline_destruct,
+     .key_size = sizeof(OutlineHashKey),
+     .value_size = sizeof(OutlineHashValue)
+ };
+@@ -275,7 +299,7 @@ static bool face_size_metrics_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void face_size_metrics_destruct(void *key, void *value)
++static void face_size_metrics_key_destruct(void *key)
+ {
+     FaceSizeMetricsHashKey *k = key;
+     ass_cache_dec_ref(k->font);
+@@ -288,7 +312,7 @@ const CacheDesc face_size_metrics_cache_desc = {
+     .compare_func = face_size_metrics_compare,
+     .key_move_func = face_size_metrics_key_move,
+     .construct_func = ass_face_size_metrics_construct,
+-    .destruct_func = face_size_metrics_destruct,
++    .key_destruct_func = face_size_metrics_key_destruct,
+     .key_size = sizeof(FaceSizeMetricsHashKey),
+     .value_size = sizeof(FT_Size_Metrics)
+ };
+@@ -306,7 +330,7 @@ static bool glyph_metrics_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void glyph_metrics_destruct(void *key, void *value)
++static void glyph_metrics_key_destruct(void *key)
+ {
+     GlyphMetricsHashKey *k = key;
+     ass_cache_dec_ref(k->font);
+@@ -319,7 +343,7 @@ const CacheDesc glyph_metrics_cache_desc = {
+     .compare_func = glyph_metrics_compare,
+     .key_move_func = glyph_metrics_key_move,
+     .construct_func = ass_glyph_metrics_construct,
+-    .destruct_func = glyph_metrics_destruct,
++    .key_destruct_func = glyph_metrics_key_destruct,
+     .key_size = sizeof(GlyphMetricsHashKey),
+     .value_size = sizeof(FT_Glyph_Metrics)
+ };
+@@ -340,15 +364,19 @@ static bool shape_key_move(void *dst, void *src)
+     return true;
+ }
+ 
+-static void shape_destruct(void *key, void *value)
++static void shape_key_destruct(void *key)
+ {
+     ShapeHashKey *k = key;
+-    ShapeHashValue *v = value;
+-    free(v->glyphs);
+     free((char *) k->text.str);
+     ass_cache_dec_ref(k->font);
+ }
+ 
++static void shape_destruct(void *value)
++{
++    ShapeHashValue *v = value;
++    free(v->glyphs);
++}
++
+ size_t ass_shape_construct(void *key, void *value, void *priv);
+ 
+ const CacheDesc shape_cache_desc = {
+@@ -356,7 +384,8 @@ const CacheDesc shape_cache_desc = {
+     .compare_func = shape_compare,
+     .key_move_func = shape_key_move,
+     .construct_func = ass_shape_construct,
+-    .destruct_func = shape_destruct,
++    .key_destruct_func = shape_key_destruct,
++    .value_destruct_func = shape_destruct,
+     .key_size = sizeof(ShapeHashKey),
+     .value_size = sizeof(ShapeHashValue)
+ };
+@@ -364,22 +393,46 @@ const CacheDesc shape_cache_desc = {
+ 
+ 
+ // Cache data
++//
++// Lookups may run on several threads at once. A bucket's chain only grows while
++// they do: new items go in at its head with a compare-and-swap, so a lookup
++// needs no lock. Items leave only between frames, while no lookup runs. A mapped
++// item holds a reference for the cache, so it can't be freed under a lookup
++// either. Items that other items or images hold when they'd be evicted are
++// parked instead: out of the eviction order until they're used again, or
++// removed once only the cache holds them, which can only happen between frames.
+ typedef struct cache_item {
+-    Cache *cache;
++    Cache *cache;   // NULL once ass_cache_empty() has let go of the item
+     const CacheDesc *desc;
+-    struct cache_item *next, **prev;
+-    struct cache_item *queue_next, **queue_prev;
+-    size_t size, ref_count;
++    ass_hashcode hash;
++    size_t size;
++    struct cache_item *_Atomic next;    // in the bucket chain
++    struct cache_item *queue_next, **queue_prev;    // eviction order, oldest first
++    struct cache_item *recent_next;     // in the client's list of this frame
++    atomic_size_t ref_count;
++    atomic_uint frame;  // the frame the item was last used in
++    atomic_uint state;
++    bool parked;
+ } CacheItem;
+ 
++enum {
++    ITEM_CONSTRUCTING,
++    ITEM_AWAITED,       // constructing, and other threads wait for it
++    ITEM_READY,
++};
++
+ struct cache {
+-    unsigned buckets;
+-    CacheItem **map;
++    unsigned buckets;   // a power of two
++    CacheItem *_Atomic *map;
+     CacheItem *queue_first, **queue_last;
+ 
+     const CacheDesc *desc;
+ 
+-    size_t cache_size;
++    atomic_size_t cache_size;
++    unsigned frame;
++
++    pthread_mutex_t wait_lock;
++    pthread_cond_t wait_cond;
+ };
+ 
+ #define CACHE_ALIGN 8
+@@ -395,6 +448,11 @@ static inline CacheItem *value_to_item(void *value)
+     return (CacheItem *) ((char *) value - CACHE_ITEM_SIZE);
+ }
+ 
++static inline size_t item_cost(size_t size)
++{
++    return size + (size == 1 ? 0 : CACHE_ITEM_SIZE);
++}
++
+ 
+ // Create a cache with type-specific hash/compare/destruct/size functions
+ Cache *ass_cache_create(const CacheDesc *desc)
+@@ -402,79 +460,136 @@ Cache *ass_cache_create(const CacheDesc *desc)
+     Cache *cache = calloc(1, sizeof(*cache));
+     if (!cache)
+         return NULL;
+-    cache->buckets = 0xFFFF;
++    cache->buckets = 1 << 16;
+     cache->queue_last = &cache->queue_first;
+     cache->desc = desc;
+-    cache->map = calloc(cache->buckets, sizeof(CacheItem *));
+-    if (!cache->map) {
+-        free(cache);
+-        return NULL;
++    cache->map = calloc(cache->buckets, sizeof(*cache->map));
++    if (!cache->map)
++        goto fail;
++    if (pthread_mutex_init(&cache->wait_lock, NULL))
++        goto fail;
++    if (pthread_cond_init(&cache->wait_cond, NULL)) {
++        pthread_mutex_destroy(&cache->wait_lock);
++        goto fail;
+     }
+-
+     return cache;
++
++fail:
++    free(cache->map);
++    free(cache);
++    return NULL;
++}
++
++static CacheItem *find_item(CacheItem *item, CacheItem *end, ass_hashcode hash,
++                            const CacheDesc *desc, void *key)
++{
++    size_t key_offs = CACHE_ITEM_SIZE + align_cache(desc->value_size);
++    for (; item != end; item = atomic_load_explicit(&item->next, memory_order_acquire))
++        if (item->hash == hash && desc->compare_func(key, (char *) item + key_offs))
++            return item;
++    return NULL;
++}
++
++static void wait_until_ready(Cache *cache, CacheItem *item)
++{
++    if (atomic_load_explicit(&item->state, memory_order_acquire) == ITEM_READY)
++        return;
++
++    pthread_mutex_lock(&cache->wait_lock);
++    unsigned state = ITEM_CONSTRUCTING;
++    atomic_compare_exchange_strong(&item->state, &state, ITEM_AWAITED);
++    while (atomic_load_explicit(&item->state, memory_order_acquire) != ITEM_READY)
++        pthread_cond_wait(&cache->wait_cond, &cache->wait_lock);
++    pthread_mutex_unlock(&cache->wait_lock);
++}
++
++static void mark_ready(Cache *cache, CacheItem *item)
++{
++    if (atomic_exchange(&item->state, ITEM_READY) != ITEM_AWAITED)
++        return;
++
++    pthread_mutex_lock(&cache->wait_lock);
++    pthread_cond_broadcast(&cache->wait_cond);
++    pthread_mutex_unlock(&cache->wait_lock);
++}
++
++// Records the item's first use this frame in the client's list.
++static void use_item(Cache *cache, CacheClient *client, CacheItem *item)
++{
++    unsigned frame = cache->frame;
++    if (atomic_load_explicit(&item->frame, memory_order_relaxed) == frame ||
++            atomic_exchange_explicit(&item->frame, frame, memory_order_relaxed) == frame)
++        return;
++    item->recent_next = client->recent;
++    client->recent = item;
+ }
+ 
+ // Retrieve a value corresponding to a particular cache key,
+ // creating one if it does not already exist.
+ // The returned item is guaranteed to be valid until the next ass_cache_cut call;
+ // to extend its lifetime further, call ass_cache_inc_ref().
+-void *ass_cache_get(Cache *cache, void *key, void *priv)
++void *ass_cache_get(Cache *cache, CacheClient *client, void *key, void *priv)
+ {
+     const CacheDesc *desc = cache->desc;
+-    size_t key_offs = CACHE_ITEM_SIZE + align_cache(desc->value_size);
+-    unsigned bucket = desc->hash_func(key, ASS_HASH_INIT) % cache->buckets;
+-    CacheItem *item = cache->map[bucket];
+-    while (item) {
+-        if (desc->compare_func(key, (char *) item + key_offs)) {
+-            assert(item->size);
+-            if (!item->queue_prev || item->queue_next) {
+-                if (item->queue_prev) {
+-                    item->queue_next->queue_prev = item->queue_prev;
+-                    *item->queue_prev = item->queue_next;
+-                } else
+-                    item->ref_count++;
+-                *cache->queue_last = item;
+-                item->queue_prev = cache->queue_last;
+-                cache->queue_last = &item->queue_next;
+-                item->queue_next = NULL;
+-            }
+-            desc->key_move_func(NULL, key);
+-
+-            return (char *) item + CACHE_ITEM_SIZE;
+-        }
+-        item = item->next;
++    ass_hashcode hash = desc->hash_func(key, ASS_HASH_INIT);
++    CacheItem *_Atomic *bucket = &cache->map[hash & (cache->buckets - 1)];
++
++    CacheItem *head = atomic_load_explicit(bucket, memory_order_acquire);
++    CacheItem *item = find_item(head, NULL, hash, desc, key);
++    if (item) {
++        desc->key_move_func(NULL, key);
++        use_item(cache, client, item);
++        wait_until_ready(cache, item);
++        return (char *) item + CACHE_ITEM_SIZE;
+     }
+ 
++    size_t key_offs = CACHE_ITEM_SIZE + align_cache(desc->value_size);
+     item = malloc(key_offs + desc->key_size);
+     if (!item) {
+         desc->key_move_func(NULL, key);
+         return NULL;
+     }
+-    item->cache = cache;
+-    item->desc = desc;
+     void *new_key = (char *) item + key_offs;
+     if (!desc->key_move_func(new_key, key)) {
+         free(item);
+         return NULL;
+     }
++    item->cache = cache;
++    item->desc = desc;
++    item->hash = hash;
++    item->queue_prev = NULL;
++    item->parked = false;
++    atomic_init(&item->next, head);
++    atomic_init(&item->ref_count, 1);
++    atomic_init(&item->frame, cache->frame);
++    atomic_init(&item->state, ITEM_CONSTRUCTING);
++
++    // If another thread inserted the same key meanwhile, use its item instead.
++    CacheItem *searched = head;
++    while (!atomic_compare_exchange_weak_explicit(bucket, &head, item,
++                                                  memory_order_release,
++                                                  memory_order_acquire)) {
++        CacheItem *other = find_item(head, searched, hash, desc, new_key);
++        if (other) {
++            desc->key_destruct_func(new_key);
++            free(item);
++            use_item(cache, client, other);
++            wait_until_ready(cache, other);
++            return (char *) other + CACHE_ITEM_SIZE;
++        }
++        searched = head;
++        atomic_store_explicit(&item->next, head, memory_order_relaxed);
++    }
++
++    item->recent_next = client->recent;
++    client->recent = item;
++
+     void *value = (char *) item + CACHE_ITEM_SIZE;
+     item->size = desc->construct_func(new_key, value, priv);
+     assert(item->size);
+-
+-    CacheItem **bucketptr = &cache->map[bucket];
+-    if (*bucketptr)
+-        (*bucketptr)->prev = &item->next;
+-    item->prev = bucketptr;
+-    item->next = *bucketptr;
+-    *bucketptr = item;
+-
+-    *cache->queue_last = item;
+-    item->queue_prev = cache->queue_last;
+-    cache->queue_last = &item->queue_next;
+-    item->queue_next = NULL;
+-    item->ref_count = 1;
+-
+-    cache->cache_size += item->size + (item->size == 1 ? 0 : CACHE_ITEM_SIZE);
++    atomic_fetch_add_explicit(&cache->cache_size, item_cost(item->size),
++                              memory_order_relaxed);
++    mark_ready(cache, item);
+     return value;
+ }
+ 
+@@ -488,7 +603,9 @@ static inline void destroy_item(const CacheDesc *desc, CacheItem *item)
+ {
+     assert(item->desc == desc);
+     char *value = (char *) item + CACHE_ITEM_SIZE;
+-    desc->destruct_func(value + align_cache(desc->value_size), value);
++    if (desc->value_destruct_func)
++        desc->value_destruct_func(value);
++    desc->key_destruct_func(value + align_cache(desc->value_size));
+     free(item);
+ }
+ 
+@@ -497,8 +614,22 @@ void ass_cache_inc_ref(void *value)
+     if (!value)
+         return;
+     CacheItem *item = value_to_item(value);
+-    assert(item->size && item->ref_count);
+-    item->ref_count++;
++    atomic_fetch_add_explicit(&item->ref_count, 1, memory_order_relaxed);
++}
++
++// Takes the item out of the cache, freeing it unless something else holds it.
++static void remove_item(Cache *cache, CacheItem *item)
++{
++    CacheItem *_Atomic *link = &cache->map[item->hash & (cache->buckets - 1)];
++    CacheItem *cur;
++    while ((cur = atomic_load_explicit(link, memory_order_relaxed)) != item)
++        link = &cur->next;
++    atomic_store_explicit(link, atomic_load_explicit(&item->next, memory_order_relaxed),
++                          memory_order_relaxed);
++
++    atomic_fetch_sub_explicit(&cache->cache_size, item_cost(item->size), memory_order_relaxed);
++    item->cache = NULL;
++    ass_cache_dec_ref((char *) item + CACHE_ITEM_SIZE);
+ }
+ 
+ void ass_cache_dec_ref(void *value)
+@@ -506,77 +637,91 @@ void ass_cache_dec_ref(void *value)
+     if (!value)
+         return;
+     CacheItem *item = value_to_item(value);
+-    assert(item->size && item->ref_count);
+-    if (--item->ref_count)
+-        return;
++    size_t left = atomic_fetch_sub_explicit(&item->ref_count, 1, memory_order_acq_rel) - 1;
++    if (left == 1 && item->parked) {
++        item->parked = false;
++        remove_item(item->cache, item);
++    } else if (!left) {
++        assert(!item->cache);
++        destroy_item(item->desc, item);
++    }
++}
+ 
+-    Cache *cache = item->cache;
+-    if (cache) {
+-        if (item->next)
+-            item->next->prev = item->prev;
+-        *item->prev = item->next;
++static void unqueue_item(Cache *cache, CacheItem *item)
++{
++    if (item->queue_next)
++        item->queue_next->queue_prev = item->queue_prev;
++    else
++        cache->queue_last = item->queue_prev;
++    *item->queue_prev = item->queue_next;
++    item->queue_prev = NULL;
++}
+ 
+-        cache->cache_size -= item->size + (item->size == 1 ? 0 : CACHE_ITEM_SIZE);
++void ass_cache_flush(CacheClient *client)
++{
++    CacheItem *item = client->recent;
++    client->recent = NULL;
++    while (item) {
++        Cache *cache = item->cache;
++        if (item->queue_prev)
++            unqueue_item(cache, item);
++        item->parked = false;
++        item->queue_next = NULL;
++        item->queue_prev = cache->queue_last;
++        *cache->queue_last = item;
++        cache->queue_last = &item->queue_next;
++        item = item->recent_next;
+     }
+-    destroy_item(item->desc, item);
+ }
+ 
++// Evicts the least recently used items, parking those others hold.
+ void ass_cache_cut(Cache *cache, size_t max_size)
+ {
+-    if (cache->cache_size <= max_size)
+-        return;
+-
+-    do {
++    while (cache->queue_first &&
++           atomic_load_explicit(&cache->cache_size, memory_order_relaxed) > max_size) {
+         CacheItem *item = cache->queue_first;
+-        if (!item)
+-            break;
+-        assert(item->size);
+-
+-        cache->queue_first = item->queue_next;
+-        if (--item->ref_count) {
+-            item->queue_prev = NULL;
+-            continue;
+-        }
+-
+-        if (item->next)
+-            item->next->prev = item->prev;
+-        *item->prev = item->next;
+-
+-        cache->cache_size -= item->size + (item->size == 1 ? 0 : CACHE_ITEM_SIZE);
+-        destroy_item(cache->desc, item);
+-    } while (cache->cache_size > max_size);
+-    if (cache->queue_first)
+-        cache->queue_first->queue_prev = &cache->queue_first;
+-    else
+-        cache->queue_last = &cache->queue_first;
++        unqueue_item(cache, item);
++        if (atomic_load_explicit(&item->ref_count, memory_order_relaxed) > 1)
++            item->parked = true;
++        else
++            remove_item(cache, item);
++    }
++    cache->frame++;
+ }
+ 
+ void ass_cache_empty(Cache *cache)
+ {
+-    for (int i = 0; i < cache->buckets; i++) {
+-        CacheItem *item = cache->map[i];
++    // Every item leaves the map before any is let go of, as letting go of one
++    // can let go of others.
++    CacheItem *items = NULL;
++    for (unsigned i = 0; i < cache->buckets; i++) {
++        CacheItem *item = atomic_load_explicit(&cache->map[i], memory_order_relaxed);
++        atomic_store_explicit(&cache->map[i], NULL, memory_order_relaxed);
+         while (item) {
+-            assert(item->size);
+-            CacheItem *next = item->next;
+-            if (item->queue_prev)
+-                item->ref_count--;
+-            if (item->ref_count)
+-                item->cache = NULL;
+-            else
+-                destroy_item(cache->desc, item);
++            CacheItem *next = atomic_load_explicit(&item->next, memory_order_relaxed);
++            item->cache = NULL;
++            item->parked = false;
++            atomic_store_explicit(&item->next, items, memory_order_relaxed);
++            items = item;
+             item = next;
+         }
+-        cache->map[i] = NULL;
+     }
+-
+     cache->queue_first = NULL;
+     cache->queue_last = &cache->queue_first;
+-    cache->cache_size = 0;
++    atomic_store_explicit(&cache->cache_size, 0, memory_order_relaxed);
++
++    while (items) {
++        CacheItem *next = atomic_load_explicit(&items->next, memory_order_relaxed);
++        ass_cache_dec_ref((char *) items + CACHE_ITEM_SIZE);
++        items = next;
++    }
+ }
+ 
+ void ass_cache_done(Cache *cache)
+ {
+     ass_cache_empty(cache);
++    pthread_cond_destroy(&cache->wait_cond);
++    pthread_mutex_destroy(&cache->wait_lock);
+     free(cache->map);
+     free(cache);
+ }
+diff --git a/libass/ass_cache.h b/libass/ass_cache.h
+index 0987007..3730365 100644
+--- a/libass/ass_cache.h
++++ b/libass/ass_cache.h
+@@ -61,7 +61,7 @@ typedef ass_hashcode (*HashFunction)(void *key, ass_hashcode hval);
+ typedef bool (*HashCompare)(void *a, void *b);
+ typedef bool (*CacheKeyMove)(void *dst, void *src);
+ typedef size_t (*CacheValueConstructor)(void *key, void *value, void *priv);
+-typedef void (*CacheItemDestructor)(void *key, void *value);
++typedef void (*CacheDestructor)(void *key_or_value);
+ 
+ // cache hash keys
+ 
+@@ -103,16 +103,26 @@ typedef struct
+     HashCompare compare_func;
+     CacheKeyMove key_move_func;
+     CacheValueConstructor construct_func;
+-    CacheItemDestructor destruct_func;
++    CacheDestructor key_destruct_func;
++    CacheDestructor value_destruct_func;    // optional
+     size_t key_size;
+     size_t value_size;
+ } CacheDesc;
+ 
++// One thread's use of the caches: the items it used first this frame, which
++// ass_cache_flush() moves to the back of their caches' eviction order.
++typedef struct {
++    struct cache_item *recent;
++} CacheClient;
++
++// Lookups may run on several threads at once, each with its own client.
++// ass_cache_flush(), ass_cache_cut() and ass_cache_empty() may not overlap them.
+ Cache *ass_cache_create(const CacheDesc *desc);
+-void *ass_cache_get(Cache *cache, void *key, void *priv);
++void *ass_cache_get(Cache *cache, CacheClient *client, void *key, void *priv);
+ void *ass_cache_key(void *value);
+ void ass_cache_inc_ref(void *value);
+ void ass_cache_dec_ref(void *value);
++void ass_cache_flush(CacheClient *client);
+ void ass_cache_cut(Cache *cache, size_t max_size);
+ void ass_cache_empty(Cache *cache);
+ void ass_cache_done(Cache *cache);
+diff --git a/libass/ass_font.c b/libass/ass_font.c
+index e5f9d44..ae11fe4 100644
+--- a/libass/ass_font.c
++++ b/libass/ass_font.c
+@@ -552,9 +552,9 @@ fail:
+ /**
+  * \brief Create a new ASS_Font according to "desc" argument
+  */
+-ASS_Font *ass_font_new(ASS_Renderer *render_priv, ASS_FontDesc *desc)
++ASS_Font *ass_font_new(ASS_Renderer *render_priv, CacheClient *client, ASS_FontDesc *desc)
+ {
+-    ASS_Font *font = ass_cache_get(render_priv->cache.font_cache, desc, render_priv);
++    ASS_Font *font = ass_cache_get(render_priv->cache.font_cache, client, desc, render_priv);
+     if (!font)
+         return NULL;
+     if (font->library)
+@@ -824,7 +824,6 @@ void ass_font_clear(ASS_Font *font)
+         if (font->hb_fonts[i])
+             hb_font_destroy(font->hb_fonts[i]);
+     }
+-    free((char *) font->desc.family.str);
+ }
+ 
+ /**
+diff --git a/libass/ass_font.h b/libass/ass_font.h
+index 2388249..af61803 100644
+--- a/libass/ass_font.h
++++ b/libass/ass_font.h
+@@ -50,7 +50,7 @@ struct ass_font {
+ };
+ 
+ void ass_charmap_magic(ASS_Library *library, FT_Face face);
+-ASS_Font *ass_font_new(ASS_Renderer *render_priv, ASS_FontDesc *desc);
++ASS_Font *ass_font_new(ASS_Renderer *render_priv, CacheClient *client, ASS_FontDesc *desc);
+ void ass_face_set_size(FT_Face face, double size);
+ int ass_face_get_weight(FT_Face face);
+ FT_Long ass_face_get_style_flags(FT_Face face);
+diff --git a/libass/ass_parse.c b/libass/ass_parse.c
+index e85fc5e..a4101b0 100644
+--- a/libass/ass_parse.c
++++ b/libass/ass_parse.c
+@@ -111,7 +111,7 @@ void ass_update_font(RenderContext *state)
+         val = 0;                // normal
+     desc.italic = val;
+ 
+-    state->font = ass_font_new(state->renderer, &desc);
++    state->font = ass_font_new(state->renderer, &state->cache_client, &desc);
+ }
+ 
+ /**
+diff --git a/libass/ass_render.c b/libass/ass_render.c
+index 685027f..3ec3cde 100644
+--- a/libass/ass_render.c
++++ b/libass/ass_render.c
+@@ -84,7 +84,7 @@ static bool render_context_init(RenderContext *state, ASS_Renderer *priv)
+         return false;
+ 
+     if (!(state->shaper = ass_shaper_new(priv->cache.metrics_cache, priv->cache.face_size_metrics_cache,
+-                                         priv->cache.shape_cache)))
++                                         priv->cache.shape_cache, &state->cache_client)))
+         return false;
+ 
+     return ass_rasterizer_init(&priv->engine, &state->rasterizer, RASTERIZER_PRECISION);
+@@ -722,12 +722,14 @@ static void blend_vector_clip(RenderContext *state, ASS_Image *head)
+ 
+     ASS_Vector pos;
+     BitmapHashKey key;
+-    key.outline = ass_cache_get(render_priv->cache.outline_cache, &ol_key, render_priv);
++    key.outline = ass_cache_get(render_priv->cache.outline_cache,
++                                &state->cache_client, &ol_key, render_priv);
+     if (!key.outline || !key.outline->valid ||
+             !quantize_transform(m, &pos, NULL, true, &key))
+         return;
+ 
+-    Bitmap *clip_bm = ass_cache_get(render_priv->cache.bitmap_cache, &key, state);
++    Bitmap *clip_bm = ass_cache_get(render_priv->cache.bitmap_cache,
++                                    &state->cache_client, &key, state);
+     if (!clip_bm)
+         return;
+ 
+@@ -1183,7 +1185,7 @@ get_outline_glyph(RenderContext *state, GlyphInfo *info)
+     if (info->drawing_text.str) {
+         key.type = OUTLINE_DRAWING;
+         key.u.drawing.text = info->drawing_text;
+-        val = ass_cache_get(priv->cache.outline_cache, &key, priv);
++        val = ass_cache_get(priv->cache.outline_cache, &state->cache_client, &key, priv);
+         if (!val || !val->valid)
+             return;
+ 
+@@ -1206,7 +1208,7 @@ get_outline_glyph(RenderContext *state, GlyphInfo *info)
+         k->italic = info->italic;
+         k->flags = info->flags;
+ 
+-        val = ass_cache_get(priv->cache.outline_cache, &key, priv);
++        val = ass_cache_get(priv->cache.outline_cache, &state->cache_client, &key, priv);
+         if (!val || !val->valid)
+             return;
+ 
+@@ -1411,7 +1413,7 @@ get_bitmap_glyph(RenderContext *state, GlyphInfo *info,
+     if (!quantize_transform(m, pos, offset, first, &key))
+         return;
+ 
+-    info->bm = ass_cache_get(render_priv->cache.bitmap_cache, &key, state);
++    info->bm = ass_cache_get(render_priv->cache.bitmap_cache, &state->cache_client, &key, state);
+     if (!info->bm || !info->bm->buffer)
+         info->bm = NULL;
+ 
+@@ -1530,12 +1532,13 @@ get_bitmap_glyph(RenderContext *state, GlyphInfo *info,
+         }
+     }
+ 
+-    key.outline = ass_cache_get(render_priv->cache.outline_cache, &ol_key, render_priv);
++    key.outline = ass_cache_get(render_priv->cache.outline_cache,
++                                &state->cache_client, &ol_key, render_priv);
+     if (!key.outline || !key.outline->valid ||
+             !quantize_transform(m, pos_o, offset, false, &key))
+         return;
+ 
+-    info->bm_o = ass_cache_get(render_priv->cache.bitmap_cache, &key, state);
++    info->bm_o = ass_cache_get(render_priv->cache.bitmap_cache, &state->cache_client, &key, state);
+     if (!info->bm_o || !info->bm_o->buffer) {
+         info->bm_o = NULL;
+         *pos_o = *pos;
+@@ -2590,7 +2593,8 @@ static void render_and_combine_glyphs(RenderContext *state,
+         key.filter = info->filter;
+         key.bitmap_count = info->bitmap_count;
+         key.bitmaps = info->bitmaps;
+-        CompositeHashValue *val = ass_cache_get(render_priv->cache.composite_cache, &key, render_priv);
++        CompositeHashValue *val = ass_cache_get(render_priv->cache.composite_cache,
++                                                &state->cache_client, &key, render_priv);
+         if (!val)
+             continue;
+ 
+@@ -3444,6 +3448,8 @@ ASS_Image *ass_render_frame(ASS_Renderer *priv, ASS_Track *track,
+     if (detect_change)
+         *detect_change = ass_detect_change(priv);
+ 
++    ass_cache_flush(&priv->state.cache_client);
++
+     // free the previous image list
+     ass_frame_unref(priv->prev_images_root);
+     priv->prev_images_root = NULL;
+diff --git a/libass/ass_render.h b/libass/ass_render.h
+index c7de135..b831553 100644
+--- a/libass/ass_render.h
++++ b/libass/ass_render.h
+@@ -211,6 +211,7 @@ typedef struct {
+ // Values like current font face, color, screen position, clipping and so on are stored here.
+ struct render_context {
+     ASS_Renderer *renderer;
++    CacheClient cache_client;
+     TextInfo text_info;
+     ASS_Shaper *shaper;
+     RasterizerData rasterizer;
+diff --git a/libass/ass_shaper.c b/libass/ass_shaper.c
+index 849bf0f..ac300c8 100644
+--- a/libass/ass_shaper.c
++++ b/libass/ass_shaper.c
+@@ -66,6 +66,7 @@ struct ass_shaper {
+     Cache *face_size_metrics_cache;
+     Cache *metrics_cache;
+     Cache *shape_cache;
++    CacheClient *cache_client;
+ 
+     hb_font_funcs_t *font_funcs;
+     hb_buffer_t *buf;
+@@ -80,6 +81,7 @@ struct ass_shaper {
+ 
+ struct ass_shaper_metrics_data {
+     Cache *metrics_cache;
++    CacheClient *cache_client;
+     FaceSizeMetricsHashKey hash_key;
+ };
+ 
+@@ -227,7 +229,7 @@ get_cached_metrics(struct ass_shaper_metrics_data *metrics,
+         .size = metrics->hash_key.size,
+         .glyph_index = glyph,
+     };
+-    FT_Glyph_Metrics *val = ass_cache_get(metrics->metrics_cache, &key,
++    FT_Glyph_Metrics *val = ass_cache_get(metrics->metrics_cache, metrics->cache_client, &key,
+                                           rotate ? metrics : NULL);
+     if (!val || val->width < 0)
+         return NULL;
+@@ -472,7 +474,8 @@ static hb_font_t *get_hb_font(ASS_Shaper *shaper, GlyphInfo *info)
+         .face_index = info->face_index,
+         .size = info->font_size,
+     };
+-    FT_Size_Metrics *m = ass_cache_get(shaper->face_size_metrics_cache, &key, NULL);
++    FT_Size_Metrics *m = ass_cache_get(shaper->face_size_metrics_cache,
++                                       shaper->cache_client, &key, NULL);
+     if (!m)
+         return NULL;
+ 
+@@ -487,6 +490,7 @@ static hb_font_t *get_hb_font(ASS_Shaper *shaper, GlyphInfo *info)
+         return NULL;
+     }
+     metrics->metrics_cache = shaper->metrics_cache;
++    metrics->cache_client = shaper->cache_client;
+     metrics->hash_key = key;
+ 
+     hb_font_set_funcs(hb_font, shaper->font_funcs, metrics, free);
+@@ -746,7 +750,8 @@ static const ShapeHashValue *get_shaped_run(ASS_Shaper *shaper, GlyphInfo *info,
+             (before + run->item_length + after) * sizeof(*run->text),
+         },
+     };
+-    ShapeHashValue *shaped = ass_cache_get(shaper->shape_cache, &key, (void *) run);
++    ShapeHashValue *shaped = ass_cache_get(shaper->shape_cache,
++                                           shaper->cache_client, &key, (void *) run);
+     return shaped && shaped->count >= 0 ? shaped : NULL;
+ }
+ 
+@@ -1166,7 +1171,7 @@ bool ass_shaper_shape(ASS_Shaper *shaper, TextInfo *text_info)
+  * \brief Create a new shaper instance
+  */
+ ASS_Shaper *ass_shaper_new(Cache *metrics_cache, Cache *face_size_metrics_cache,
+-                           Cache *shape_cache)
++                           Cache *shape_cache, CacheClient *cache_client)
+ {
+     assert(metrics_cache);
+ 
+@@ -1181,6 +1186,7 @@ ASS_Shaper *ass_shaper_new(Cache *metrics_cache, Cache *face_size_metrics_cache,
+     shaper->face_size_metrics_cache = face_size_metrics_cache;
+     shaper->metrics_cache = metrics_cache;
+     shaper->shape_cache = shape_cache;
++    shaper->cache_client = cache_client;
+ 
+     hb_font_funcs_t *funcs = shaper->font_funcs = hb_font_funcs_create();
+     if (hb_font_funcs_is_immutable(funcs))
+diff --git a/libass/ass_shaper.h b/libass/ass_shaper.h
+index 095bedf..97c27ab 100644
+--- a/libass/ass_shaper.h
++++ b/libass/ass_shaper.h
+@@ -32,7 +32,7 @@ typedef struct ass_shaper ASS_Shaper;
+ 
+ void ass_shaper_info(ASS_Library *lib);
+ ASS_Shaper *ass_shaper_new(Cache *metrics_cache, Cache *face_size_metrics_cache,
+-                           Cache *shape_cache);
++                           Cache *shape_cache, CacheClient *cache_client);
+ void ass_shaper_free(ASS_Shaper *shaper);
+ bool ass_create_hb_font(ASS_Font *font, int index);
+ void ass_shaper_set_kerning(ASS_Shaper *shaper, bool kern);
+diff --git a/meson.build b/meson.build
+index 91a0435..28c7697 100644
+--- a/meson.build
++++ b/meson.build
+@@ -4,7 +4,7 @@ project(
+     license: 'ISC',
+     meson_version: '>= 0.64.0',
+     default_options: [
+-        'c_std=gnu99',
++        'c_std=gnu11',
+         'buildtype=debugoptimized',
+         'warning_level=2',
+         'default_library=static',
+@@ -86,6 +86,7 @@ endif
+ # Dependencies
+ 
+ deps += cc.find_library('m', required: false)
++deps += dependency('threads')
+ 
+ iconv_dep = dependency('iconv', required: false)
+ if iconv_dep.found()
+-- 
+2.55.0.windows.5
+
