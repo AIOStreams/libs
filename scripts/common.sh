@@ -50,6 +50,24 @@ crossfile () {
 	if cmp -s "$crossfile.tmp" "$crossfile"; then rm "$crossfile.tmp"; else mv "$crossfile.tmp" "$crossfile"; fi
 }
 
+# CMake's toolchain file for the prefix: <system> <processor>
+cmake_toolchain_file () {
+	cat >"$cmake_toolchain" <<-EOF
+		set(CMAKE_SYSTEM_NAME $1)
+		set(CMAKE_SYSTEM_PROCESSOR $2)
+		set(CMAKE_C_COMPILER $CC)
+		set(CMAKE_CXX_COMPILER $CXX)
+		set(CMAKE_RC_COMPILER ${RC:-})
+		set(CMAKE_AR $(command -v $AR))
+		set(CMAKE_RANLIB $(command -v $RANLIB))
+		set(CMAKE_FIND_ROOT_PATH $prefix_dir)
+		set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+		set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+		set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+		set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+	EOF
+}
+
 # A folder's files as a zip, in name order: <zip> <folder>
 zipdir () {
 	python3 - "$@" <<-'PY'

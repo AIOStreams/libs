@@ -1,11 +1,16 @@
 # Windows: llvm-mingw's clang, cross-compiling from Linux, packaged as
-# out/ffmpeg-windows-<arch>.zip: FFmpeg's avcodec and avutil with the decoders AIOStreams'
-# desktop app makes seek-bar thumbnails with, AV1 through dav1d.
+# out/libmpv-windows-<arch>.zip: libmpv-2.dll, FFmpeg's DLLs and every library's licence.
+# libmpv imports vulkan-1.dll, which GPU drivers install.
 
 archs="x86_64 aarch64"
-ships=(ffmpeg)
+ships=(mpv)
 
-dep_ffmpeg=(dav1d)
+dep_ffmpeg=(zlib dav1d libxml2 nvcodec-headers)
+dep_libxml2=(zlib)
+dep_freetype2=(zlib)
+dep_libass=(freetype2 fribidi harfbuzz unibreak)
+dep_libplacebo=(vulkan shaderc spirv-cross lcms2)
+dep_mpv=(ffmpeg libass luajit libiconv uchardet libplacebo)
 
 # llvm-mingw in sdk/, downloaded once.
 fetch_llvm_mingw () (
@@ -23,17 +28,20 @@ toolchain () {
 	fetch_llvm_mingw
 	host=$arch-w64-mingw32
 	export PATH="$root/sdk/llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64/bin:$PATH"
-	export CC=$host-clang CXX=$host-clang++ AR=$host-ar NM=$host-nm RANLIB=$host-ranlib STRIP=$host-strip
-	crossfile windows $arch $arch "windres = '$host-windres'"
+	export CC=$host-clang CXX=$host-clang++ AR=$host-ar NM=$host-nm RANLIB=$host-ranlib STRIP=$host-strip \
+		RC=$host-windres
+	crossfile windows $arch $arch "windres = '$RC'"
+	cmake_toolchain_file Windows $arch
 }
 
 package () (
-	local files=$(mktemp -d)
+	local files=$(mktemp -d) runtime="$root/sdk/llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64/$host/bin" dll
 	trap 'rm -rf "$files"' EXIT
-	for dll in "$prefix_dir"/bin/avcodec-*.dll "$prefix_dir"/bin/avutil-*.dll; do
-		$STRIP -o "$files/$(basename "$dll")" "$dll"
+	# libmpv and the DLLs it imports from the prefix; the rest are Windows' own.
+	for dll in libmpv-2.dll $($host-objdump -p "$prefix_dir/bin/libmpv-2.dll" | sed -n 's/^\s*DLL Name: //p'); do
+		[ -f "$runtime/$dll" ] && die "libmpv-2.dll imports the toolchain's $dll, which the app doesn't ship"
+		[ -f "$prefix_dir/bin/$dll" ] && $STRIP -o "$files/$dll" "$prefix_dir/bin/$dll"
 	done
-	cp "$prefix_dir/licenses/ffmpeg/COPYING.LGPLv2.1" "$files/FFmpeg-COPYING.LGPLv2.1"
-	cp "$prefix_dir/licenses/dav1d/COPYING" "$files/dav1d-COPYING"
-	zipdir "$root/out/ffmpeg-windows-$arch.zip" "$files"
+	cp -r "$prefix_dir/licenses" "$files/licenses"
+	zipdir "$root/out/libmpv-windows-$arch.zip" "$files"
 )

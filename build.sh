@@ -36,7 +36,7 @@ case $platform in common|fetch|recipe) usage ;; esac
 export root platform arch cores
 export prefix_dir="$root/prefix/$platform-$arch"
 export build_dir=_build-$platform-$arch
-export crossfile="$prefix_dir/crossfile.txt"
+export crossfile="$prefix_dir/crossfile.txt" cmake_toolchain="$prefix_dir/toolchain.cmake"
 export dest="$root/prefix/.dest-$platform-$arch"
 mkdir -p "$prefix_dir" "$root/out"
 # Everything installs to /usr/local in the prefix, which these make the prefix itself.
@@ -54,7 +54,7 @@ inputs () {
 	local needs="dep_${1//-/_}[*]" pin dep
 	{
 		cat "$root/recipes/$1.sh" "$root/scripts/recipe.sh"
-		declare -f toolchain crossfile
+		declare -f toolchain crossfile cmake_toolchain_file
 		for pin in $(pins $1) v_sdk v_ndk v_ndk_n v_gas_preprocessor v_llvm_mingw; do echo "$pin=${!pin}"; done
 		cat "$root/patches/$1"/*.patch 2>/dev/null || true
 		for dep in ${!needs}; do cat "$prefix_dir/.built/$dep"; done

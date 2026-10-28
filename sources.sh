@@ -21,6 +21,19 @@ v_fribidi=1.0.16
 v_freetype=2.14.1
 v_mbedtls=3.6.5
 v_libxml2=2.13.5
+v_zlib=1.3.2
+v_libiconv=1.18
+v_lcms2=2.19.1
+v_luajit=a4c064539ea931274d407e1249b4bb575424a0f4 # v2.1
+v_uchardet=ae6302a016088ad07177f86d417b20010053632b # 0.0.8
+v_nvcodec_headers=n13.0.19.0
+# Vulkan's headers and loader, and SPIRV-Cross, at one SDK release
+v_vulkan=1.4.363.0
+v_shaderc=v2026.4
+# and the commits shaderc's DEPS names
+v_glslang=e1b562a8bed273a02f30b59b66a5d499793cede5
+v_spirv_tools=ef96ed763b43b59b33b31b362f09a02b729fa1c9
+v_spirv_headers=04fd3caa1e8267e4d95c806cad901181728e1006
 v_dav1d=54706fc6bc0cdecab7e9593974a4039cc038fca7 # 1.5.4
 v_ffmpeg=7ef5a794c42abcb4a62e1ab22f4ae3ce40aee729
 v_libass=f61db567e6593df3470e91594bcd4ad2d0473aff # master, after 0.17.5
