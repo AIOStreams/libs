@@ -23,11 +23,15 @@ toolchain () {
 }
 
 package () (
-	local files=$(mktemp -d) dylib name lib
+	local files=$(mktemp -d) dylib name lib todo=libmpv.2.dylib
 	trap 'rm -rf "$files"' EXIT
-	# libmpv and the dylibs it loads from the prefix; the rest are the system's.
-	for name in libmpv.2.dylib $(otool -L "$prefix_dir/lib/libmpv.2.dylib" | sed -En 's#^[[:space:]]*(/usr/local/lib|@rpath)/([^ ]*) .*#\2#p'); do
-		[ -f "$files/$name" ] || cp "$prefix_dir/lib/$name" "$files/"
+	# libmpv and the dylibs it loads from the prefix, and theirs; the rest are the system's.
+	while [ -n "$todo" ]; do
+		set -- $todo
+		name=$1 && shift && todo="$*"
+		[ -f "$files/$name" ] && continue
+		cp "$prefix_dir/lib/$name" "$files/"
+		todo+=" $(otool -L "$files/$name" | sed -En 's#^[[:space:]]*(/usr/local/lib|@rpath)/([^ ]*) .*#\2#p' | xargs)"
 	done
 	for dylib in "$files"/*.dylib; do
 		name=$(basename "$dylib")

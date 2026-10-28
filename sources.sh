@@ -30,8 +30,8 @@ v_nvcodec_headers=n13.0.19.0
 # Vulkan's headers and loader, and SPIRV-Cross, at one SDK release
 v_vulkan=1.4.363.0
 # Khronos' build of MoltenVK for macOS, and the SHA-256 of its MoltenVK-macos.tar
-v_moltenvk=1.4.2
-v_moltenvk_sha256=f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e
+v_moltenvk=1.4.1 # 1.4.2 needs macOS 12
+v_moltenvk_sha256=5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf
 v_shaderc=v2026.4
 # and the commits shaderc's DEPS names
 v_glslang=e1b562a8bed273a02f30b59b66a5d499793cede5

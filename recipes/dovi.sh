@@ -17,9 +17,10 @@ case $platform in
 		cp target/$target/release/libdolby_vision.so "$dest/lib/libdovi.so"
 		;;
 	macos)
-		# The C API's static library, header and pkg-config file.
+		# The C API's dylib, header and pkg-config file. Linked in statically, Rust's unwinder would
+		# be libmpv's fourth, one more than Apple's linker can encode.
 		rustup target add $host
-		cargo cinstall --release --locked --features capi --target $host --library-type staticlib \
+		cargo cinstall --release --locked --features capi --target $host --library-type cdylib \
 			--prefix /usr/local --destdir "$dest"
 		;;
 esac
