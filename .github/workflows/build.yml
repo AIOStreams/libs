@@ -45,7 +45,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: prefix/${{ matrix.platform }}-${{ matrix.arch }}
-          key: ${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('sources.sh', 'build.sh', 'scripts/**', 'recipes/**', 'patches/**') }}
+          key: ${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('sources.sh', 'build.sh', 'scripts/**', 'recipes/**') }}
           restore-keys: ${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build

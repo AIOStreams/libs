@@ -48,15 +48,12 @@ export host
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig"
 unset PKG_CONFIG_PATH
 
-# What a library's build depends on: its recipe, pin and patches, the platform's toolchain,
-# and what it was built with.
 inputs () {
 	local needs="dep_${1//-/_}[*]" pin dep
 	{
 		cat "$root/recipes/$1.sh" "$root/scripts/recipe.sh"
 		declare -f toolchain crossfile cmake_toolchain_file
 		for pin in $(pins $1) v_sdk v_ndk v_ndk_n v_gas_preprocessor v_llvm_mingw; do echo "$pin=${!pin}"; done
-		cat "$root/patches/$1"/*.patch 2>/dev/null || true
 		for dep in ${!needs}; do cat "$prefix_dir/.built/$dep"; done
 	} | sha256 | cut -d' ' -f1
 }
