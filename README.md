@@ -32,6 +32,7 @@ They apply in order, and none of them change what libass draws.
 | `0007-shared-caches.patch` | The caches can be looked up from several threads at once, without a lock |
 | `0008-shared-fonts.patch` | Threads can share fonts: each font locks its FreeType faces, and glyph indices are cached per face without a lock |
 | `0009-serialized-logging.patch` | The message callback gets one message at a time |
+| `0010-render-threads.patch` | Frames predicted to take more than 16 ms render their events on helper threads too, as few as bring them under it; `ass_set_threads()` sets the most, by default one per processor up to 8 |
 
 ## libmpv for Android
 
