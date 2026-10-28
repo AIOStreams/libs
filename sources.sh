@@ -27,6 +27,8 @@ v_uchardet=ae6302a016088ad07177f86d417b20010053632b # 0.0.8
 v_nvcodec_headers=n13.0.19.0
 # Vulkan-Headers, the loader's exports and SPIRV-Cross share an SDK release.
 v_vulkan=1.4.363.0
+v_moltenvk=1.4.1 # 1.4.2 needs macOS 12
+v_moltenvk_sha256=5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf
 v_shaderc=v2026.4
 # shaderc's DEPS names these.
 v_glslang=e1b562a8bed273a02f30b59b66a5d499793cede5

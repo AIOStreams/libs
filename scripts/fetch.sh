@@ -42,6 +42,11 @@ fetch () (
 		lua) unpack $1.part z https://www.lua.org/ftp/lua-$v_lua.tar.gz ;;
 		luajit) clone_at $1.part https://github.com/LuaJIT/LuaJIT $v_luajit ;;
 		mbedtls) unpack $1.part j https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-$v_mbedtls/mbedtls-$v_mbedtls.tar.bz2 ;;
+		moltenvk)
+			download $1.tar https://github.com/KhronosGroup/MoltenVK/releases/download/v$v_moltenvk/MoltenVK-macos.tar \
+				$v_moltenvk_sha256
+			mkdir $1.part && tar -xf $1.tar -C $1.part --strip-components=1 && rm $1.tar
+			;;
 		mpv) clone_at $1.part https://github.com/AIOStreams/mpv $v_mpv ;;
 		nvcodec-headers) clone_at $1.part https://github.com/FFmpeg/nv-codec-headers $v_nvcodec_headers ;;
 		shaderc)

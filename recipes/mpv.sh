@@ -1,12 +1,20 @@
 case $platform in
 	android) args=(-Diconv=disabled -Dlua=enabled) ;;
 	windows)
-		# meson looks for iconv beside the compiler, not through pkg-config. The C++ and
-		# thread libraries link in, as the app ships only libmpv and FFmpeg.
+		# meson looks for iconv beside the compiler; the C++ and thread runtimes link in.
 		link="['-L$prefix_dir/lib', '-static-libgcc', '-Wl,-Bstatic', '-lc++', '-lwinpthread', '-Wl,-Bdynamic']"
 		args=(
 			-Dlua=luajit -D{iconv,uchardet,lcms2,d3d11,vulkan,shaderc,spirv-cross}=enabled
 			-D{c,cpp}_args=-I$prefix_dir/include -D{c,cpp}_link_args="$link"
+		)
+		;;
+	macos)
+		args=(
+			-Dlua=luajit -D{iconv,uchardet,lcms2,vulkan,moltenvk,gl,plain-gl,gl-cocoa,cocoa}=enabled
+			-D{coreaudio,avfoundation,vo-avfoundation,videotoolbox-gl,videotoolbox-pl}=enabled
+			-D{macos-touchbar,macos-media-player}=disabled
+			-Dswift-flags="-target $arch-apple-macos$MACOSX_DEPLOYMENT_TARGET"
+			-D{c,objc}_link_args=-Wl,-headerpad_max_install_names
 		)
 		;;
 esac

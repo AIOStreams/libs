@@ -1,4 +1,4 @@
-# The tools ../build.sh needs, for docker/build.sh; it fetches the SDKs and sources itself.
+# The tools ../build.sh needs, for docker/build.sh.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     help2man libtool libtool-bin lld nasm ninja-build openjdk-21-jdk pkg-config python3 \
     python3-pip texinfo unzip yasm zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-# meson as CI pins it, and mbedtls' generators' modules
+# mbedtls' generators need jsonschema and jinja2.
 RUN pip3 install --break-system-packages meson==1.12.1 jsonschema jinja2
 
 ENV HOME=/home/mpvbuilder

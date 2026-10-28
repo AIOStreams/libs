@@ -1,11 +1,11 @@
-# What build.sh and the platforms share; sourced, with root set to the repository.
+# Sourced with root set to the repository.
 
 . "$root/sources.sh"
 
 if [[ "$OSTYPE" == darwin* ]]; then
 	cores=${cores:-$(sysctl -n hw.ncpu)}
-	# Several builds rely on GNU's sed and install.
-	export SED=gsed INSTALL=ginstall
+	# Builds rely on GNU sed and install; autoconf takes a bare INSTALL as a path in the source.
+	export SED=gsed INSTALL=$(command -v ginstall)
 else
 	cores=${cores:-$(nproc)}
 fi
@@ -17,14 +17,20 @@ sha256 () {
 	if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
 }
 
-# A file, checked against its SHA-256: <file> <url> <sha256>
+# <file> <url> <sha256>
 download () {
 	curl -fsSL --retry 3 -o "$1.part" "$2"
 	echo "$3  $1.part" | sha256 -c --quiet - || die "$2 isn't the pinned file"
 	mv "$1.part" "$1"
 }
 
-# meson's cross file for the prefix: <system> <cpu family> <cpu> [more [binaries] lines]
+meson_list () {
+	local word list=
+	for word in $1; do list+="${list:+, }'$word'"; done
+	echo "[$list]"
+}
+
+# <system> <cpu family> <cpu> [more [binaries] lines]
 crossfile () {
 	cat >"$crossfile.tmp" <<-EOF
 		[built-in options]
@@ -33,8 +39,9 @@ crossfile () {
 		wrap_mode = 'nodownload'
 		prefix = '/usr/local'
 		[binaries]
-		c = '$CC'
-		cpp = '$CXX'
+		c = $(meson_list "$CC")
+		cpp = $(meson_list "$CXX")
+		objc = $(meson_list "$CC")
 		ar = '$AR'
 		nm = '$NM'
 		strip = '$STRIP'
@@ -46,17 +53,21 @@ crossfile () {
 		cpu = '$3'
 		endian = 'little'
 	EOF
-	# Rewritten only when it changes, so meson doesn't reconfigure everything.
+	# Rewritten only on a change, or meson reconfigures everything.
 	if cmp -s "$crossfile.tmp" "$crossfile"; then rm "$crossfile.tmp"; else mv "$crossfile.tmp" "$crossfile"; fi
 }
 
-# CMake's toolchain file for the prefix: <system> <processor>
+flags_of () { if [[ $1 == *' '* ]]; then echo "${1#* }"; fi; }
+
+# <system> <processor>
 cmake_toolchain_file () {
 	cat >"$cmake_toolchain" <<-EOF
 		set(CMAKE_SYSTEM_NAME $1)
 		set(CMAKE_SYSTEM_PROCESSOR $2)
-		set(CMAKE_C_COMPILER $CC)
-		set(CMAKE_CXX_COMPILER $CXX)
+		set(CMAKE_C_COMPILER ${CC%% *})
+		set(CMAKE_CXX_COMPILER ${CXX%% *})
+		set(CMAKE_C_FLAGS_INIT "$(flags_of "$CC")")
+		set(CMAKE_CXX_FLAGS_INIT "$(flags_of "$CXX")")
 		set(CMAKE_RC_COMPILER ${RC:-})
 		set(CMAKE_AR $(command -v $AR))
 		set(CMAKE_RANLIB $(command -v $RANLIB))
@@ -68,7 +79,7 @@ cmake_toolchain_file () {
 	EOF
 }
 
-# A folder's files as a zip, in name order: <zip> <folder>
+# <zip> <folder>
 zipdir () {
 	python3 - "$@" <<-'PY'
 		import os, sys, zipfile

@@ -1,6 +1,6 @@
 mkdir -p $build_dir && cd $build_dir
 args=(
-	--enable-cross-compile --cross-prefix=$host- --cc=$CC --pkg-config=pkg-config
+	--enable-cross-compile --cc="$CC" --pkg-config=pkg-config
 	--disable-static --enable-shared --enable-{gpl,version3} --disable-{doc,programs}
 	--disable-{encoders,devices}
 	# for screenshots, and AC-3 to re-encode surround sound for S/PDIF
@@ -17,17 +17,28 @@ case $platform in
 			i686*) cpu="i686 --disable-asm" ;;
 		esac
 		args+=(
-			--target-os=android --nm=llvm-nm --arch=${host%%-*} --cpu=$cpu
+			--target-os=android --cross-prefix=$host- --nm=llvm-nm --arch=${host%%-*} --cpu=$cpu
 			--extra-cflags="-I$prefix_dir/include $cflags" --extra-ldflags="-L$prefix_dir/lib"
 			--enable-{jni,mediacodec,mbedtls} --disable-stripping
 		)
 		;;
 	windows)
 		args+=(
-			--target-os=mingw32 --arch=$arch --pkg-config-flags=--static
+			--target-os=mingw32 --cross-prefix=$host- --arch=$arch --pkg-config-flags=--static
 			--enable-{zlib,ffnvcodec,nvdec} --disable-avdevice
-			# Windows Graphics Capture, the one part that needs C++
+			# the one part needing C++
 			--disable-filter=gfxcapture
+		)
+		;;
+	macos)
+		args+=(
+			--target-os=darwin --arch=$arch --pkg-config-flags=--static
+			--enable-{videotoolbox,audiotoolbox,securetransport} --disable-avdevice
+			--extra-cflags="$(pkg-config --cflags dovi)" --extra-libs="$(pkg-config --libs --static dovi)"
+			# room for the packaging's install names
+			--extra-ldflags=-Wl,-headerpad_max_install_names
+			# make install can relink, which would put DESTDIR in the names
+			--install-name-dir=/usr/local/lib
 		)
 		;;
 esac

@@ -1,16 +1,14 @@
 #!/bin/bash -e
 # Builds a platform's libraries for one architecture and packages them into out/:
 #   ./build.sh [--clean] [--no-deps] <platform> <arch> [library]
-# With a library, builds only it and what it needs (or only it, with --no-deps). A
-# platform is scripts/<platform>.sh, a library's build recipes/<library>.sh. Sources go
-# in deps/, toolchains in sdk/, each build in prefix/<platform>-<arch>.
+# With a library, builds only it and what it needs, or only it with --no-deps.
 
 root=$(cd "$(dirname "$0")" && pwd)
 . "$root/scripts/common.sh"
 . "$root/scripts/fetch.sh"
 
 usage () {
-	sed -n '2,6p' "$0" | cut -c3- >&2
+	sed -n '2,4p' "$0" | cut -c3- >&2
 	echo "Platforms: $(cd "$root/scripts" && ls | sed -n 's/\.sh$//p' | grep -vx 'common\|fetch\|recipe' | xargs)" >&2
 	exit 1
 }
@@ -39,7 +37,7 @@ export build_dir=_build-$platform-$arch
 export crossfile="$prefix_dir/crossfile.txt" cmake_toolchain="$prefix_dir/toolchain.cmake"
 export dest="$root/prefix/.dest-$platform-$arch"
 mkdir -p "$prefix_dir" "$root/out"
-# Everything installs to /usr/local in the prefix, which these make the prefix itself.
+# Installs go to /usr/local, which these fold into the prefix.
 [ -e "$prefix_dir/usr" ] || ln -s . "$prefix_dir/usr"
 [ -e "$prefix_dir/local" ] || ln -s . "$prefix_dir/local"
 unset CC CXX CPATH LIBRARY_PATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
@@ -58,14 +56,15 @@ inputs () {
 	} | sha256 | cut -d' ' -f1
 }
 
-declare -A built
+# A list, as macOS's bash 3.2 has no associative arrays.
+built=" "
 build () {
 	local name=$1 dep needs="dep_${1//-/_}[*]"
-	[ -n "${built[$name]}" ] && return
+	[[ $built == *" $name "* ]] && return
 	if [ $nodeps -eq 0 ]; then
 		for dep in ${!needs}; do build $dep; done
 	fi
-	built[$name]=1
+	built+="$name "
 	local stamp="$prefix_dir/.built/$name"
 	if [ $clean -eq 0 ] && [ "$(cat "$stamp" 2>/dev/null)" = "$(inputs $name)" ]; then
 		msg "$name for $platform $arch is up to date"
@@ -75,8 +74,7 @@ build () {
 	msg "Building $name for $platform $arch..."
 	rm -f "$stamp"
 	[ $clean -eq 1 ] && rm -rf "$root/deps/$name/$build_dir"
-	# It installs into $dest, flattened like the prefix, then moves in over what it installed
-	# before, so nothing it no longer installs stays behind.
+	# Installed apart and moved in, so files a rebuild no longer installs go.
 	rm -rf "$dest" && mkdir -p "$dest" && ln -s . "$dest/usr" && ln -s . "$dest/local"
 	(cd "$root/deps/$name" && bash -e -c '. "$root/scripts/recipe.sh"; . "$0"' "$root/recipes/$name.sh")
 	if [ -f "$stamp.files" ]; then
@@ -85,7 +83,6 @@ build () {
 	(cd "$dest" && find . -mindepth 1 \( -type f -o -type l \) ! -path ./usr ! -path ./local | sort) >"$dest.files"
 	(cd "$dest" && tr '\n' '\0' <"$dest.files" | tar -c --null -T - -f -) | (cd "$prefix_dir" && tar -xf -)
 	mkdir -p "$prefix_dir/.built" && mv "$dest.files" "$stamp.files" && rm -rf "$dest"
-	# Its licence, for the packages.
 	rm -rf "$prefix_dir/licenses/$name" && mkdir -p "$prefix_dir/licenses/$name"
 	find "$root/deps/$name" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
 		-exec cp {} "$prefix_dir/licenses/$name/" \;

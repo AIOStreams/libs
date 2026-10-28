@@ -6,6 +6,12 @@ case $platform in
 			-Dvulkan-registry="$prefix_dir/share/vulkan/registry/vk.xml"
 		)
 		;;
+	macos)
+		args=(
+			-D{vulkan,shaderc,lcms,libdovi}=enabled -Dglslang=disabled
+			-Dvulkan-registry="$prefix_dir/share/vulkan/registry/vk.xml"
+		)
+		;;
 esac
 meson_build -Ddemos=false "${args[@]}"
 # Static linking needs the C++ library, which meson leaves out:
