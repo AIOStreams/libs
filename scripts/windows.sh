@@ -1,4 +1,4 @@
-# Windows, cross-compiled from Linux, packaged as out/libmpv-windows-<arch>.zip. libmpv
+# Windows, cross-compiled from Linux, packaged as out/libs-windows-<arch>.zip. libmpv
 # imports vulkan-1.dll, which GPU drivers install.
 
 archs="x86_64 aarch64"
@@ -42,5 +42,5 @@ package () (
 	done
 	cp -r "$prefix_dir/licenses" "$files/licenses"
 	license_index "$files"
-	zipdir "$root/out/libmpv-windows-$arch.zip" "$files"
+	zipdir "$root/out/libs-windows-$arch.zip" "$files"
 )

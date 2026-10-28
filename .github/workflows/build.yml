@@ -83,9 +83,9 @@ jobs:
         run: |
           mkdir -p out joined
           # Each holds its own ABI, the rest is the same.
-          unzip -q built/android-arm64/libmpv-android.aar -d joined
-          for arch in armv7l x86_64; do unzip -q -o built/android-$arch/libmpv-android.aar 'jni/*' -d joined; done
-          (cd joined && zip -q -r -X ../out/libmpv-android.aar .)
+          unzip -q built/android-arm64/libs-android.aar -d joined
+          for arch in armv7l x86_64; do unzip -q -o built/android-$arch/libs-android.aar 'jni/*' -d joined; done
+          (cd joined && zip -q -r -X ../out/libs-android.aar .)
           cp built/{windows,macos}-*/*.zip out/
           (cd out && sha256sum * | tee SHA256SUMS)
 

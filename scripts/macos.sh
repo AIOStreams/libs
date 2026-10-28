@@ -1,4 +1,4 @@
-# macOS 11 and later, built on a Mac, packaged as out/libmpv-macos-<arch>.zip.
+# macOS 11 and later, built on a Mac, packaged as out/libs-macos-<arch>.zip.
 
 archs="arm64 x86_64"
 ships=(mpv)
@@ -60,5 +60,5 @@ package () (
 	PY
 	cp -r "$prefix_dir/licenses" "$files/licenses"
 	license_index "$files"
-	zipdir "$root/out/libmpv-macos-$arch.zip" "$files"
+	zipdir "$root/out/libs-macos-$arch.zip" "$files"
 )

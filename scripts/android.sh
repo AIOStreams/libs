@@ -1,4 +1,4 @@
-# Android at API level 21, packaged as out/libmpv-android.aar with every ABI built so far.
+# Android at API level 21, packaged as out/libs-android.aar with every ABI built so far.
 
 archs="armv7l arm64 x86 x86_64"
 ships=(mpv dovi)
@@ -78,5 +78,5 @@ package () (
 	license_index lib/src/main/assets
 	ndk-build -C lib/src/main -j$cores
 	./gradlew :lib:assembleRelease
-	cp lib/build/outputs/aar/lib-release.aar "$root/out/libmpv-android.aar"
+	cp lib/build/outputs/aar/lib-release.aar "$root/out/libs-android.aar"
 )
