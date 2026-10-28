@@ -1,57 +1,70 @@
-# aiostreams-libs
+# AIOStreams libraries
 
-[![Build Status](https://github.com/Viren070/aiostreams-libs/actions/workflows/build.yml/badge.svg?branch=library)](https://github.com/Viren070/aiostreams-libs/actions/workflows/build.yml)
+[![Build Status](https://github.com/AIOStreams/libs/actions/workflows/build.yml/badge.svg?branch=library)](https://github.com/AIOStreams/libs/actions/workflows/build.yml)
 
-The native libraries [AIOStreams](https://github.com/Viren070/AIOStreams)' apps ship. Every source is pinned to a commit in [depinfo.sh](buildscripts/include/depinfo.sh), the patches in [buildscripts/patches](buildscripts/patches) apply on top, and each push to `library` publishes a release with these files and their SHA-256s:
+The native libraries [AIOStreams](https://github.com/Viren070/AIOStreams)' apps play video with: libmpv, with FFmpeg, libass, libplacebo and the libraries they use, for Android, Windows and macOS. Every source is pinned, and each push to `library` publishes all of it as one release. Our changes to mpv, FFmpeg and libass live in AIOStreams' forks of them ([below](#our-changes)).
+
+## Releases
+
+Each release is tagged `<yyyymmdd>-<commit>` and holds:
 
 | File | What it is | Used by |
 | --- | --- | --- |
-| `mpv-android-lib-<tag>.aar` | libmpv for Android (arm64-v8a, armeabi-v7a, x86_64), with FFmpeg, dav1d, libass, libplacebo and libdovi | The Android app's mpv player, FFmpeg audio decoders and seek-bar thumbnails |
-| `ffmpeg-windows-<arch>.zip` | FFmpeg's avcodec and avutil DLLs for Windows x86_64 and aarch64, with only the H.264, HEVC, VP9, MPEG-1/2 and AV1 (dav1d) decoders | The desktop app's seek-bar thumbnails |
+| `libs-android.aar` | libmpv, FFmpeg, libass and libdovi for arm64-v8a, armeabi-v7a and x86_64, with a Kotlin API ([below](#the-android-library)), and each library's licence in `assets/licenses` | The Android app |
+| `libs-windows-<arch>.zip` | `libmpv-2.dll` and FFmpeg's DLLs for x86_64 and aarch64, and each library's licence in `licenses`. It imports `vulkan-1.dll`, which GPU drivers install | The desktop app on Windows |
+| `libs-macos-<arch>.zip` | `libmpv.2.dylib` with FFmpeg's and MoltenVK's dylibs for arm64 and x86_64, for macOS 11 and later, each finding the others beside it through `@rpath`, and each library's licence in `licenses` | The desktop app on macOS |
+| `SHA256SUMS` | Every file's SHA-256 | |
 
-## FFmpeg patches
+The release notes list the pinned version of each source. Each package's `licenses/index.json` lists its libraries with their pins and licence files, for the apps' licence pages.
 
-| Patch | Change |
+## Layout
+
+| Path | What it holds |
 | --- | --- |
-| `hevcpred-10bit-neon.patch` | NEON 10-bit HEVC angular and planar intra prediction on aarch64 |
-| `hevc-irap-missing-refs.patch` | Decoding that starts at an open-GOP keyframe no longer allocates and fills a frame for each of its references, which only skipped pictures use |
-| `libdav1d-skip-loop-filter.patch` | `skip_loop_filter` turns off dav1d's in-loop filters, as it does FFmpeg's own decoders' |
+| `sources.sh` | Every pin: a release version where the project publishes archives, otherwise a commit |
+| `recipes/<library>.sh` | How each library builds, with its options per platform |
+| `scripts/<platform>.sh` | A platform's toolchain, architectures, which library needs which, and how its release file is packaged |
+| `build.sh` | Builds a platform for one architecture |
+| `android/` | The Gradle project the AAR is built with |
+| `docker/` | A container with the tools for the Android and Windows builds |
 
-## libass patches
+## Building
 
-They apply in order, and none of them change what libass draws.
+```sh
+./build.sh <platform> <arch> [library]
+```
 
-| Patch | Change |
+For example `./build.sh windows x86_64` writes `out/libs-windows-x86_64.zip`. With a library, it builds only that library and what it needs, without packaging. Sources go in `deps/`, fetched again when their pins change, toolchains in `sdk/` and each build in `prefix/<platform>-<arch>/`. A library is rebuilt only when its recipe, pin, toolchain or one of the libraries it needs has changed, so a second run after a small change is quick; `--clean` starts its build folders over.
+
+- **Android and Windows** build on Linux, which needs autotools, pkg-config, meson, ninja, nasm, CMake and Python 3. The build downloads the Android SDK and NDK or [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) itself. Android also needs Java 21 and Rust. `docker/build.sh android arm64` runs a build in a container that has everything.
+- **macOS** builds on a Mac with Xcode, Rust, CMake, Python 3, [cargo-c](https://github.com/lu-zero/cargo-c) and Homebrew's autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gnu-sed and coreutils.
+
+CI builds each platform and architecture in its own job and keeps each build's prefix in the cache, so a release rebuilds only what changed.
+
+## Our changes
+
+[AIOStreams/mpv](https://github.com/AIOStreams/mpv), [AIOStreams/FFmpeg](https://github.com/AIOStreams/FFmpeg) and [AIOStreams/libass](https://github.com/AIOStreams/libass) each have an `aiostreams` branch: the upstream commit we build on, with our changes as commits. `sources.sh` pins the branch's commit, which a tag (`aiostreams-<date>`) keeps whatever happens to the branch later. Moving to a newer upstream means rebasing the branch, tagging it and changing the pin.
+
+| Fork | Changes |
 | --- | --- |
-| `0001-parse-integers-without-strtoll.patch` | Integer tag values are parsed without `strtoll` |
-| `0002-strtod-short-decimals.patch` | Short decimal tag values are converted with one division |
-| `0003-skip-fribidi-for-ltr-paragraphs.patch` | Left-to-right paragraphs skip FriBidi |
-| `0004-shaped-run-cache.patch` | HarfBuzz's result for each run of text is cached, and each face keeps its sized HarfBuzz fonts instead of making one for every run |
-| `0005-scaled-cache-budget.patch` | The default bitmap cache shrinks with the frame: 192 MB at 4K, 48 MB at 1080p, at least 32 MB |
-| `0006-shift-bitmap-rows.patch` | Shadow bitmaps are shifted a row at a time, which the compiler vectorizes |
-| `0007-shared-caches.patch` | The caches can be looked up from several threads at once, without a lock |
-| `0008-shared-fonts.patch` | Threads can share fonts: each font locks its FreeType faces, and glyph indices are cached per face without a lock |
-| `0009-serialized-logging.patch` | The message callback gets one message at a time |
-| `0010-render-threads.patch` | Frames predicted to take more than 16 ms render their events on helper threads too, as few as bring them under it; `ass_set_threads()` sets the most, by default one per processor up to 8 |
+| mpv | [edde746](https://github.com/edde746)'s MPVKit patches: a MoltenVK context for `gpu-next` on macOS, an AVFoundation video output that hands frames to the system's compositor, with HDR, Dolby Vision and picture in picture, passthrough through AVFoundation's audio output, and hardware decoding that waits out a burst of decode errors before falling back to software |
+| FFmpeg | NEON 10-bit HEVC intra prediction on aarch64; decoding that starts at an open-GOP keyframe no longer fills a frame for each reference only skipped pictures use; `skip_loop_filter` for dav1d; and edde746's VideoToolbox patches for Dolby Vision on macOS: profile 7 converted to 8.1 with libdovi, its RPUs and HDR tags kept, and a plain HEVC session when the Dolby Vision one fails |
+| libass | Faster parsing and shaping: integers without `strtoll`, short decimals with one division, FriBidi skipped for left-to-right paragraphs and HarfBuzz's results cached; a default bitmap cache that shrinks with the frame; shadows shifted a row at a time; and rendering on helper threads, with caches and fonts shared between them. Frames predicted to take more than 16 ms use as few helpers as bring them under it, and `ass_set_threads()` sets the most, by default one per processor up to 8. None of it changes what libass draws |
 
-## libmpv for Android
+edde746's commits are from [MPVKit](https://github.com/edde746/MPVKit) at `b9e88e8`, rebased onto our pins, and keep their author. They are licensed under the GPL-3.0-only, © edde746, as `LICENSE.MPVKit` in each fork says. Two of the FFmpeg patches are left out: one only builds for Mac Catalyst, and FFmpeg has the other already.
 
-A library version of [mpv-android](https://github.com/mpv-android/mpv-android), providing [libmpv](https://github.com/mpv-player/mpv) for Android applications. Initially made for [mpvKt](https://github.com/abdallahmehiz/mpvKt).
+## The Android library
 
-### "New" Features
+The AAR is a library version of [mpv-android](https://github.com/mpv-android/mpv-android), from [abdallahmehiz](https://github.com/abdallahmehiz)'s, made for [mpvKt](https://github.com/abdallahmehiz/mpvKt). Beside libmpv it has:
 
-* **Multiple MPV instances**
-* **`mpv_node` support**
-* **DASH support**
-* **FFmpeg's audio decoders and encoders**, through `AudioDecoder` and `AudioEncoder`, for a player that handles sound itself
+- **Several mpv instances** at once, each independent
+- **`mpv_node`** values for properties and commands
+- **DASH** playback
+- **FFmpeg's audio decoders and encoders**, through `AudioDecoder` and `AudioEncoder`, for a player that handles sound itself
 
-### Installation
+It needs `androidx.core` and `kotlinx-coroutines-android` beside it.
 
-Download the AAR from [Releases](https://github.com/Viren070/aiostreams-libs/releases) and check it against the SHA-256 in the release notes. It needs `androidx.core` and `kotlinx-coroutines-android` beside it.
-
-### Getting Started
-
-#### Using BaseMPVView
+### Using BaseMPVView
 
 `BaseMPVView` attaches its surface to the `MPV` you give it:
 
@@ -61,9 +74,7 @@ playerView.mpv = MPV(context) { it.setOptionString("hwdec", "auto") }
 playerView.mpv?.command("loadfile", "/path/to/video.mp4")
 ```
 
-#### Using MPV() Directly
-
-You can also use `MPV()` then attach to fully control your mpv instance.
+### Using MPV directly
 
 ```kotlin
 // preInit runs before mpv initializes, which is when it reads options such as its config
@@ -72,40 +83,25 @@ val mpv = MPV(context) {
     it.setOptionString("config-dir", configDir)
 }
 
-// Attach to a view surface
 mpv.attachSurface(surface)
-
-// Load and play a file
 mpv.command("loadfile", "/path/to/video.mp4")
 
-// Access props
+// properties
 val paused: Boolean? = mpv.prop["pause"]
 mpv.prop["pause"] = false
 
-// access and set nodes
+// nodes
 val node: MPVNode? = mpv.getPropertyNode("track-list")
 mpv.setPropertyNode("chapter-list", myCustomChaptersList)
 
-// observe as kotlin flows
+// properties as Kotlin flows
 val pauseState: StateFlow<Boolean?> = mpv.propFlow["pause"]
 
-// cleanup
 mpv.detachSurface()
 mpv.close()
 ```
 
-#### Multiple Instances
-
-Each `MPV()` or `BaseMPVView` instance is independent:
-
-```kotlin
-val player1 = MPV(context)
-val player2 = MPV(context)
-
-// Each player can play different content simultaneously
-```
-
-#### FFmpeg's Audio Decoders and Encoders
+### FFmpeg's audio decoders and encoders
 
 `AudioDecoder` decodes packets with one of FFmpeg's decoders into interleaved 16-bit or float samples, and `AudioEncoder` encodes interleaved float samples, for example to AC-3 for a receiver that decodes it. Both take direct `ByteBuffer`s:
 
@@ -125,9 +121,6 @@ AudioEncoder("ac3", "5.1", sampleRate = 48000, bitRate = 640_000).use { encoder 
 
 `AudioDecoder.has(codec)` and `AudioEncoder.has(codec)` say whether this build of FFmpeg has one.
 
-## Building from source
+## Licence
 
-- The Android library: see [buildscripts/README.md](buildscripts/README.md).
-- FFmpeg for Windows: `buildscripts/windows-ffmpeg.sh x86_64|aarch64` on Linux, with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) at the version in depinfo.sh, meson, ninja and nasm on PATH. It writes `buildscripts/windows/ffmpeg-windows-<arch>.zip`.
-
-Some other documentation can be found at this [link](http://mpv-android.github.io/mpv-android/).
+The build scripts and the Android library's own code are under the MIT licence in `LICENSE`, from mpv-android. Each library keeps its own: mpv is GPL-2.0-or-later and FFmpeg is built with its GPL-3.0 parts, so a release's libmpv as a whole is under the GPL-3.0.
