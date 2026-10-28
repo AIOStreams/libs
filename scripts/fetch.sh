@@ -1,7 +1,6 @@
-# fetch <name>: the pinned source of a library in deps/<name>, downloaded again whenever its
-# pins change; deps/<name>/.source records them.
+# fetch <name>: a library's pinned source in deps/<name>, fetched again when its pins change.
 
-# A repository at one commit, with its submodules: <dir> <url> <commit>
+# <dir> <url> <commit>
 clone_at () {
 	git init -q "$1"
 	git -C "$1" fetch -q --depth 1 "$2" "$3"
@@ -9,7 +8,7 @@ clone_at () {
 	git -C "$1" submodule -q update --init --recursive
 }
 
-# An archive's contents without its top folder: <dir> <tar's compression flag> <url>
+# <dir> <tar's compression flag> <url>
 unpack () {
 	mkdir "$1"
 	curl -fsSL --retry 3 "$3" | tar -x"$2" -C "$1" --strip-components=1
@@ -25,7 +24,7 @@ fetch () (
 	fi
 	[ -d "$1" ] && return
 	msg "Fetching $1..."
-	# Into a folder of its own first, so an interrupted download starts over.
+	# Apart first, so an interrupted download starts over.
 	rm -rf "$1.part"
 	case $1 in
 		dav1d) clone_at $1.part https://github.com/videolan/dav1d $v_dav1d ;;
@@ -57,10 +56,10 @@ fetch () (
 			clone_at $1.part/third_party/spirv-headers https://github.com/KhronosGroup/SPIRV-Headers $v_spirv_headers
 			;;
 		spirv-cross) clone_at $1.part https://github.com/KhronosGroup/SPIRV-Cross vulkan-sdk-$v_vulkan ;;
-		# freedesktop.org's site turns CI runners away; its GitLab doesn't.
+		# freedesktop.org's downloads turn CI runners away.
 		uchardet) clone_at $1.part https://gitlab.freedesktop.org/uchardet/uchardet.git $v_uchardet ;;
 		unibreak) unpack $1.part z https://github.com/adah1972/libunibreak/releases/download/libunibreak_${v_unibreak//./_}/libunibreak-$v_unibreak.tar.gz ;;
-		# The headers, and the loader's list of exports for its import library.
+		# The loader's exports make its import library.
 		vulkan)
 			clone_at $1.part https://github.com/KhronosGroup/Vulkan-Headers vulkan-sdk-$v_vulkan
 			curl -fsSL --retry 3 -o $1.part/vulkan-1.def \
@@ -73,7 +72,6 @@ fetch () (
 	mv "$1.part" "$1"
 )
 
-# The pins a library's source comes from.
 pins () {
 	case $1 in
 		freetype2) echo v_freetype ;;

@@ -1,16 +1,14 @@
 #!/bin/bash -e
 # Builds a platform's libraries for one architecture and packages them into out/:
 #   ./build.sh [--clean] [--no-deps] <platform> <arch> [library]
-# With a library, builds only it and what it needs (or only it, with --no-deps). A
-# platform is scripts/<platform>.sh, a library's build recipes/<library>.sh. Sources go
-# in deps/, toolchains in sdk/, each build in prefix/<platform>-<arch>.
+# With a library, builds only it and what it needs, or only it with --no-deps.
 
 root=$(cd "$(dirname "$0")" && pwd)
 . "$root/scripts/common.sh"
 . "$root/scripts/fetch.sh"
 
 usage () {
-	sed -n '2,6p' "$0" | cut -c3- >&2
+	sed -n '2,4p' "$0" | cut -c3- >&2
 	echo "Platforms: $(cd "$root/scripts" && ls | sed -n 's/\.sh$//p' | grep -vx 'common\|fetch\|recipe' | xargs)" >&2
 	exit 1
 }
@@ -39,7 +37,7 @@ export build_dir=_build-$platform-$arch
 export crossfile="$prefix_dir/crossfile.txt" cmake_toolchain="$prefix_dir/toolchain.cmake"
 export dest="$root/prefix/.dest-$platform-$arch"
 mkdir -p "$prefix_dir" "$root/out"
-# Everything installs to /usr/local in the prefix, which these make the prefix itself.
+# Installs go to /usr/local, which these fold into the prefix.
 [ -e "$prefix_dir/usr" ] || ln -s . "$prefix_dir/usr"
 [ -e "$prefix_dir/local" ] || ln -s . "$prefix_dir/local"
 unset CC CXX CPATH LIBRARY_PATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
@@ -48,19 +46,31 @@ export host
 export PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig"
 unset PKG_CONFIG_PATH
 
-# What a library's build depends on: its recipe and pins, the platform's toolchain,
-# and what it was built with.
+# A library's licences in prefix/licenses/<name>, with those of the projects it vendors.
+collect_licenses () {
+	local dir to
+	rm -rf "$prefix_dir/licenses/$1"
+	for dir in "$root/deps/$1" "$root/deps/$1"/{third_party,3rdparty}/*/; do
+		[ -d "$dir" ] || continue
+		to="$prefix_dir/licenses/$1${dir#"$root/deps/$1"}"
+		mkdir -p "$to"
+		find "$dir" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
+			-exec cp {} "$to" \;
+		rmdir "$to" 2>/dev/null || true
+	done
+}
+
 inputs () {
 	local needs="dep_${1//-/_}[*]" pin dep
 	{
 		cat "$root/recipes/$1.sh" "$root/scripts/recipe.sh"
-		declare -f toolchain crossfile cmake_toolchain_file
+		declare -f toolchain crossfile cmake_toolchain_file collect_licenses
 		for pin in $(pins $1) v_sdk v_ndk v_ndk_n v_gas_preprocessor v_llvm_mingw; do echo "$pin=${!pin}"; done
 		for dep in ${!needs}; do cat "$prefix_dir/.built/$dep"; done
 	} | sha256 | cut -d' ' -f1
 }
 
-# What this run has built, as a list: macOS's bash 3.2 has no associative arrays.
+# A list, as macOS's bash 3.2 has no associative arrays.
 built=" "
 build () {
 	local name=$1 dep needs="dep_${1//-/_}[*]"
@@ -78,8 +88,7 @@ build () {
 	msg "Building $name for $platform $arch..."
 	rm -f "$stamp"
 	[ $clean -eq 1 ] && rm -rf "$root/deps/$name/$build_dir"
-	# It installs into $dest, flattened like the prefix, then moves in over what it installed
-	# before, so nothing it no longer installs stays behind.
+	# Installed apart and moved in, so files a rebuild no longer installs go.
 	rm -rf "$dest" && mkdir -p "$dest" && ln -s . "$dest/usr" && ln -s . "$dest/local"
 	(cd "$root/deps/$name" && bash -e -c '. "$root/scripts/recipe.sh"; . "$0"' "$root/recipes/$name.sh")
 	if [ -f "$stamp.files" ]; then
@@ -88,10 +97,7 @@ build () {
 	(cd "$dest" && find . -mindepth 1 \( -type f -o -type l \) ! -path ./usr ! -path ./local | sort) >"$dest.files"
 	(cd "$dest" && tr '\n' '\0' <"$dest.files" | tar -c --null -T - -f -) | (cd "$prefix_dir" && tar -xf -)
 	mkdir -p "$prefix_dir/.built" && mv "$dest.files" "$stamp.files" && rm -rf "$dest"
-	# Its licence, for the packages.
-	rm -rf "$prefix_dir/licenses/$name" && mkdir -p "$prefix_dir/licenses/$name"
-	find "$root/deps/$name" -maxdepth 1 -type f \( -iname 'COPYING*' -o -iname 'LICEN[CS]E*' -o -iname 'COPYRIGHT*' \) \
-		-exec cp {} "$prefix_dir/licenses/$name/" \;
+	collect_licenses $name
 	inputs $name >"$stamp"
 }
 

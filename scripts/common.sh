@@ -1,11 +1,10 @@
-# What build.sh and the platforms share; sourced, with root set to the repository.
+# Sourced with root set to the repository.
 
 . "$root/sources.sh"
 
 if [[ "$OSTYPE" == darwin* ]]; then
 	cores=${cores:-$(sysctl -n hw.ncpu)}
-	# Several builds rely on GNU's sed and install; autoconf takes a bare INSTALL as a path
-	# inside the source.
+	# Builds rely on GNU sed and install; autoconf takes a bare INSTALL as a path in the source.
 	export SED=gsed INSTALL=$(command -v ginstall)
 else
 	cores=${cores:-$(nproc)}
@@ -18,21 +17,20 @@ sha256 () {
 	if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
 }
 
-# A file, checked against its SHA-256: <file> <url> <sha256>
+# <file> <url> <sha256>
 download () {
 	curl -fsSL --retry 3 -o "$1.part" "$2"
 	echo "$3  $1.part" | sha256 -c --quiet - || die "$2 isn't the pinned file"
 	mv "$1.part" "$1"
 }
 
-# A command and its arguments as a meson list.
 meson_list () {
 	local word list=
 	for word in $1; do list+="${list:+, }'$word'"; done
 	echo "[$list]"
 }
 
-# meson's cross file for the prefix: <system> <cpu family> <cpu> [more [binaries] lines]
+# <system> <cpu family> <cpu> [more [binaries] lines]
 crossfile () {
 	cat >"$crossfile.tmp" <<-EOF
 		[built-in options]
@@ -55,14 +53,13 @@ crossfile () {
 		cpu = '$3'
 		endian = 'little'
 	EOF
-	# Rewritten only when it changes, so meson doesn't reconfigure everything.
+	# Rewritten only on a change, or meson reconfigures everything.
 	if cmp -s "$crossfile.tmp" "$crossfile"; then rm "$crossfile.tmp"; else mv "$crossfile.tmp" "$crossfile"; fi
 }
 
-# What follows a command: <command and arguments>
 flags_of () { if [[ $1 == *' '* ]]; then echo "${1#* }"; fi; }
 
-# CMake's toolchain file for the prefix: <system> <processor>
+# <system> <processor>
 cmake_toolchain_file () {
 	cat >"$cmake_toolchain" <<-EOF
 		set(CMAKE_SYSTEM_NAME $1)
@@ -82,7 +79,7 @@ cmake_toolchain_file () {
 	EOF
 }
 
-# A folder's files as a zip, in name order: <zip> <folder>
+# <zip> <folder>
 zipdir () {
 	python3 - "$@" <<-'PY'
 		import os, sys, zipfile
@@ -92,4 +89,26 @@ zipdir () {
 		    for name in names:
 		        z.write(os.path.join(top, name), name)
 	PY
+}
+
+# <folder>/licenses/index.json, which the apps list licences from.
+license_index () {
+	local name pin
+	for name in $(ls "$1/licenses"); do
+		[ -d "$1/licenses/$name" ] || continue
+		printf %s "$name"
+		for pin in $(pins $name); do printf '\t%s=%s' $pin "${!pin}"; done
+		echo
+	done | python3 -c '
+import json, os, sys
+top = sys.argv[1]
+libraries = []
+for line in sys.stdin.read().splitlines():
+    name, *pins = line.split("\t")
+    folder = os.path.join(top, name)
+    files = sorted(os.path.relpath(os.path.join(d, f), folder).replace(os.sep, "/") for d, _, fs in os.walk(folder) for f in fs)
+    libraries.append({"name": name, "pins": dict(p.split("=", 1) for p in pins), "files": files})
+with open(os.path.join(top, "index.json"), "w") as out:
+    json.dump({"libraries": libraries}, out, indent=1)
+' "$1/licenses"
 }

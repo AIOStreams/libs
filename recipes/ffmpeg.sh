@@ -26,7 +26,7 @@ case $platform in
 		args+=(
 			--target-os=mingw32 --cross-prefix=$host- --arch=$arch --pkg-config-flags=--static
 			--enable-{zlib,ffnvcodec,nvdec} --disable-avdevice
-			# Windows Graphics Capture, the one part that needs C++
+			# the one part needing C++
 			--disable-filter=gfxcapture
 		)
 		;;
@@ -34,7 +34,6 @@ case $platform in
 		args+=(
 			--target-os=darwin --arch=$arch --pkg-config-flags=--static
 			--enable-{videotoolbox,audiotoolbox,securetransport} --disable-avdevice
-			# libdovi converts Dolby Vision profile 7 for VideoToolbox.
 			--extra-cflags="$(pkg-config --cflags dovi)" --extra-libs="$(pkg-config --libs --static dovi)"
 			# room for the packaging's install names
 			--extra-ldflags=-Wl,-headerpad_max_install_names

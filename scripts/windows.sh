@@ -1,6 +1,5 @@
-# Windows: llvm-mingw's clang, cross-compiling from Linux, packaged as
-# out/libmpv-windows-<arch>.zip: libmpv-2.dll, FFmpeg's DLLs and every library's licence.
-# libmpv imports vulkan-1.dll, which GPU drivers install.
+# Windows, cross-compiled from Linux, packaged as out/libmpv-windows-<arch>.zip. libmpv
+# imports vulkan-1.dll, which GPU drivers install.
 
 archs="x86_64 aarch64"
 ships=(mpv)
@@ -12,7 +11,6 @@ dep_libass=(freetype2 fribidi harfbuzz unibreak)
 dep_libplacebo=(vulkan shaderc spirv-cross lcms2)
 dep_mpv=(ffmpeg libass luajit libiconv uchardet libplacebo)
 
-# llvm-mingw in sdk/, downloaded once.
 fetch_llvm_mingw () (
 	mkdir -p "$root/sdk" && cd "$root/sdk"
 	local name=llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64
@@ -37,11 +35,12 @@ toolchain () {
 package () (
 	local files=$(mktemp -d) runtime="$root/sdk/llvm-mingw-$v_llvm_mingw-ucrt-ubuntu-22.04-x86_64/$host/bin" dll
 	trap 'rm -rf "$files"' EXIT
-	# libmpv and the DLLs it imports from the prefix; the rest are Windows' own.
+	# libmpv and what it imports from the prefix.
 	for dll in libmpv-2.dll $($host-objdump -p "$prefix_dir/bin/libmpv-2.dll" | sed -n 's/^\s*DLL Name: //p'); do
 		[ -f "$runtime/$dll" ] && die "libmpv-2.dll imports the toolchain's $dll, which the app doesn't ship"
 		[ -f "$prefix_dir/bin/$dll" ] && $STRIP -o "$files/$dll" "$prefix_dir/bin/$dll"
 	done
 	cp -r "$prefix_dir/licenses" "$files/licenses"
+	license_index "$files"
 	zipdir "$root/out/libmpv-windows-$arch.zip" "$files"
 )

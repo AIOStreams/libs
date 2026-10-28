@@ -1,9 +1,7 @@
 name: build
 
-# Builds each platform's libraries, an architecture per job, from the sources sources.sh
-# pins. Each job restores its prefix from the cache, where build.sh skips the libraries
-# whose inputs haven't changed. A push to library publishes everything as one release,
-# tagged with the date and commit.
+# An architecture per job, each starting from its cached prefix. A push to library
+# publishes one release, tagged with the date and commit.
 on:
   push:
     branches: [library]

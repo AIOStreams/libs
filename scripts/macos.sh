@@ -1,6 +1,4 @@
-# macOS: Xcode's clang, on a Mac, for macOS 11 and later, packaged as
-# out/libmpv-macos-<arch>.zip: libmpv.2.dylib, FFmpeg's and MoltenVK's dylibs and every
-# library's licence, each finding the others beside it.
+# macOS 11 and later, built on a Mac, packaged as out/libmpv-macos-<arch>.zip.
 
 archs="arm64 x86_64"
 ships=(mpv)
@@ -16,7 +14,7 @@ toolchain () {
 	export MACOSX_DEPLOYMENT_TARGET=11.0
 	local flags="-arch $arch -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
 	export CC="clang $flags" CXX="clang++ $flags" AR=ar NM=nm RANLIB=ranlib STRIP=strip
-	# Homebrew's, named apart from Apple's libtool
+	# Homebrew's, not Apple's libtool
 	export LIBTOOLIZE=glibtoolize
 	crossfile darwin ${arch/arm64/aarch64} $arch
 	cmake_toolchain_file Darwin $arch
@@ -25,7 +23,7 @@ toolchain () {
 package () (
 	local files=$(mktemp -d) dylib name lib todo=libmpv.2.dylib
 	trap 'rm -rf "$files"' EXIT
-	# libmpv and the dylibs it loads from the prefix, and theirs; the rest are the system's.
+	# libmpv and what it loads from the prefix, transitively.
 	while [ -n "$todo" ]; do
 		set -- $todo
 		name=$1 && shift && todo="$*"
@@ -35,7 +33,7 @@ package () (
 	done
 	for dylib in "$files"/*.dylib; do
 		name=$(basename "$dylib")
-		# Khronos' build already loads by @rpath, and stays as they signed it.
+		# Khronos signed it, and it loads by @rpath already.
 		[ $name = libMoltenVK.dylib ] && continue
 		chmod u+w "$dylib"
 		install_name_tool -id "@rpath/$name" "$dylib"
@@ -47,6 +45,20 @@ package () (
 		strip -x "$dylib"
 		codesign -f -s - "$dylib"
 	done
+	# Fails if anything libmpv loads is missing.
+	arch -$arch /usr/bin/python3 - "$files/libmpv.2.dylib" <<-'PY'
+		import ctypes, sys
+		mpv = ctypes.CDLL(sys.argv[1])
+		mpv.mpv_create.restype = ctypes.c_void_p
+		mpv.mpv_initialize.argtypes = mpv.mpv_terminate_destroy.argtypes = [ctypes.c_void_p]
+		mpv.mpv_get_property_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+		mpv.mpv_get_property_string.restype = ctypes.c_char_p
+		handle = mpv.mpv_create()
+		assert handle and mpv.mpv_initialize(handle) == 0, 'mpv did not start'
+		print(*(mpv.mpv_get_property_string(handle, p).decode() for p in (b'mpv-version', b'ffmpeg-version')))
+		mpv.mpv_terminate_destroy(handle)
+	PY
 	cp -r "$prefix_dir/licenses" "$files/licenses"
+	license_index "$files"
 	zipdir "$root/out/libmpv-macos-$arch.zip" "$files"
 )

@@ -1,5 +1,4 @@
-# Android: the NDK's clang for an ABI at API level 21, packaged as out/libmpv-android.aar
-# with every ABI built so far.
+# Android at API level 21, packaged as out/libmpv-android.aar with every ABI built so far.
 
 archs="armv7l arm64 x86 x86_64"
 ships=(mpv dovi)
@@ -8,7 +7,6 @@ dep_ffmpeg=(mbedtls dav1d libxml2)
 dep_libass=(freetype2 fribidi harfbuzz unibreak)
 dep_mpv=(ffmpeg libass lua libplacebo)
 
-# The SDK and NDK in sdk/, downloaded once.
 fetch_sdk () (
 	mkdir -p "$root/sdk" && cd "$root/sdk"
 	local os=linux
@@ -69,12 +67,15 @@ package () (
 		var=${abi#*:} abi=${abi%:*}
 		[ -f "$root/prefix/android-$abi/lib/libmpv.so" ] && export $var="$root/prefix/android-$abi"
 	done
-	# The pins MPVLib reports, while the AAR builds.
+	# Restored once the AAR is built.
 	local utils=lib/src/main/java/is/xyz/mpv/Utils.kt
 	cp $utils $utils.orig
 	trap 'mv $utils.orig $utils' EXIT
 	${SED:-sed} -i -e "s/%MPV_VERSION%/${v_mpv::9}/" -e "s/%LIBPLACEBO_VERSION%/${v_libplacebo::9}/" \
 		-e "s/%FFMPEG_VERSION%/${v_ffmpeg::9}/" -e "s/%DATE%/$(LC_ALL=C date -u '+%b %e %Y %T')/" $utils
+	rm -rf lib/src/main/assets/licenses
+	cp -r "$prefix_dir/licenses" lib/src/main/assets/licenses
+	license_index lib/src/main/assets
 	ndk-build -C lib/src/main -j$cores
 	./gradlew :lib:assembleRelease
 	cp lib/build/outputs/aar/lib-release.aar "$root/out/libmpv-android.aar"
