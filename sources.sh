@@ -35,7 +35,7 @@ v_glslang=e1b562a8bed273a02f30b59b66a5d499793cede5
 v_spirv_tools=ef96ed763b43b59b33b31b362f09a02b729fa1c9
 v_spirv_headers=04fd3caa1e8267e4d95c806cad901181728e1006
 v_dav1d=54706fc6bc0cdecab7e9593974a4039cc038fca7 # 1.5.4
-v_libplacebo=0d043c7f6f79cd3687c023454bdacbe615e4d96f
+v_libplacebo=275f7dea27924cdd34ab2e6c20e448b6bc4fab65 # v7.387.0
 v_dovi=d1abe0e27ff2c7ab3339614d06db9f8a058af6b2 # libdovi 3.4.0
 
 ## Our forks: the tagged commit and the upstream one it builds on
