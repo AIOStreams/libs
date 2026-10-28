@@ -38,7 +38,8 @@ package () (
 		for lib in $(otool -L "$dylib" | sed -En 's#^[[:space:]]*(/usr/local/lib/[^ ]*) .*#\1#p'); do
 			install_name_tool -change "$lib" "@rpath/$(basename "$lib")" "$dylib"
 		done
-		install_name_tool -add_rpath @loader_path "$dylib"
+		# dyld refuses a library that lists a run path twice.
+		otool -l "$dylib" | grep -q 'path @loader_path ' || install_name_tool -add_rpath @loader_path "$dylib"
 		strip -x "$dylib"
 		codesign -f -s - "$dylib"
 	done
