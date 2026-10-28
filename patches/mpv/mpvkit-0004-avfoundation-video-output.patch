@@ -65,7 +65,7 @@ index b6beb26..2cb46bd 100644
      &video_out_gpu,
 diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
 new file mode 100644
-index 0000000..9b7b4e1
+index 0000000..5f9ec48
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
 @@ -0,0 +1,2818 @@
@@ -757,7 +757,7 @@ index 0000000..9b7b4e1
 +        return;
 +
 +    if (old_queue_lead_ms != p->opts->queue_lead_ms)
-+        vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1);
++        vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1, 1);
 +
 +    if (old_composite_osd == p->opts->composite_osd &&
 +        old_pip_composite_osd == p->opts->pip_composite_osd)
@@ -2343,7 +2343,7 @@ index 0000000..9b7b4e1
 +        displayLayer.controlTimebase = timebase;
 +    });
 +    [displayLayer release];
-+    vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1);
++    vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1, 1);
 +    update_avfoundation_geometry(vo);
 +
 +    if (p->opts->composite_osd && !ensure_ci_compositor(vo))
@@ -2887,6 +2887,3 @@ index 0000000..9b7b4e1
 +    .options = priv_options,
 +    .global_opts = &avfoundation_conf,
 +};
--- 
-2.43.0
-

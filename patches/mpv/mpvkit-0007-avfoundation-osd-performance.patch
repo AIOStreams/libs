@@ -1,5 +1,5 @@
 diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
-index 9b7b4e1..e585f7d 100644
+index 5f9ec48..a7d36e1 100644
 --- a/video/out/vo_avfoundation.m
 +++ b/video/out/vo_avfoundation.m
 @@ -18,6 +18,10 @@
@@ -68,7 +68,7 @@ index 9b7b4e1..e585f7d 100644
          return;
 @@ -688,17 +724,29 @@ static void update_avfoundation_options(struct vo *vo)
      if (old_queue_lead_ms != p->opts->queue_lead_ms)
-         vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1);
+         vo_set_queue_params(vo, MP_TIME_MS_TO_NS(p->opts->queue_lead_ms), 1, 1);
  
 -    if (old_composite_osd == p->opts->composite_osd &&
 -        old_pip_composite_osd == p->opts->pip_composite_osd)

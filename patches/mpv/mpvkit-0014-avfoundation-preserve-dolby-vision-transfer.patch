@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-3.0-only
 Copyright (C) 2025-2026 edde746
 ---
 diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
-index ce6a430..e2291eb 100644
+index 3a50ef9..0c85553 100644
 --- a/video/out/vo_avfoundation.m
 +++ b/video/out/vo_avfoundation.m
 @@ -1156,6 +1156,22 @@ static void tag_pixel_buffer_color_metadata(CVPixelBufferRef pixbuf,
@@ -45,6 +45,3 @@ index ce6a430..e2291eb 100644
          // The format description is stable across frames from the same pool;
          // CMVideoFormatDescriptionMatchesImageBuffer compares dimensions,
          // pixel format and the relevant attachments, so any real change
--- 
-2.43.0
-

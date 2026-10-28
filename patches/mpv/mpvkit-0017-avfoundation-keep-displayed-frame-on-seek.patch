@@ -22,7 +22,7 @@ SPDX-License-Identifier: GPL-3.0-only
 Copyright (C) 2025-2026 edde746
 ---
 diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
-index d7f6f46..c253d27 100644
+index 24391f4..d90a72e 100644
 --- a/video/out/vo_avfoundation.m
 +++ b/video/out/vo_avfoundation.m
 @@ -3769,7 +3769,13 @@ static int control(struct vo *vo, uint32_t request, void *data)
@@ -49,6 +49,3 @@ index d7f6f46..c253d27 100644
          sample_buffer_renderer_flush(p->osdLayer, true);
          if (p->presentation_host && p->timebase) {
              // Fresh host-time samples arrive with future timestamps; the
--- 
-2.43.0
-

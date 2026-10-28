@@ -38,7 +38,7 @@ SPDX-License-Identifier: GPL-3.0-only
 Copyright (C) 2025-2026 edde746
 ---
 diff --git a/video/out/vo_avfoundation.m b/video/out/vo_avfoundation.m
-index e2291eb..d7f6f46 100644
+index 0c85553..24391f4 100644
 --- a/video/out/vo_avfoundation.m
 +++ b/video/out/vo_avfoundation.m
 @@ -91,6 +91,211 @@ struct avfoundation_opts {
@@ -505,6 +505,3 @@ index e2291eb..d7f6f46 100644
      return true;
  }
  
--- 
-2.43.0
-
