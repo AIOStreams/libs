@@ -30,6 +30,7 @@ They apply in order, and none of them change what libass draws.
 | `0005-scaled-cache-budget.patch` | The default bitmap cache shrinks with the frame: 192 MB at 4K, 48 MB at 1080p, at least 32 MB |
 | `0006-shift-bitmap-rows.patch` | Shadow bitmaps are shifted a row at a time, which the compiler vectorizes |
 | `0007-shared-caches.patch` | The caches can be looked up from several threads at once, without a lock |
+| `0008-shared-fonts.patch` | Threads can share fonts: each font locks its FreeType faces, and glyph indices are cached per face without a lock |
 
 ## libmpv for Android
 
