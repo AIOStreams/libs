@@ -1,4 +1,4 @@
-From fb5a372cb867a1d95b59283def91ac2b77689f03 Mon Sep 17 00:00:00 2001
+From 4edfaf6eedd36892d38e278d832d442e91ec613b Mon Sep 17 00:00:00 2001
 From: Viren070 <viren070@protonmail.com>
 Date: Tue, 27 Oct 2026 20:45:25 +0000
 Subject: [PATCH] ass_render: render events on helper threads
@@ -18,11 +18,11 @@ threads keep waiting for each other's cache items use fewer.
  libass/ass_render.c        |  27 ++-
  libass/ass_render.h        |  17 ++
  libass/ass_render_api.c    |  12 +
- libass/ass_render_pool.c   | 450 +++++++++++++++++++++++++++++++++++++
+ libass/ass_render_pool.c   | 460 +++++++++++++++++++++++++++++++++++++
  libass/ass_utils.h         |   8 +
  libass/libass.sym          |   1 +
  libass/meson.build         |   1 +
- 11 files changed, 526 insertions(+), 12 deletions(-)
+ 11 files changed, 536 insertions(+), 12 deletions(-)
  create mode 100644 libass/ass_render_pool.c
 
 diff --git a/libass/Makefile_library.am b/libass/Makefile_library.am
@@ -300,10 +300,10 @@ index 6e809f3..bccdcf6 100644
  {
 diff --git a/libass/ass_render_pool.c b/libass/ass_render_pool.c
 new file mode 100644
-index 0000000..843b07a
+index 0000000..f39035b
 --- /dev/null
 +++ b/libass/ass_render_pool.c
-@@ -0,0 +1,450 @@
+@@ -0,0 +1,460 @@
 +/*
 + * Copyright (C) 2026 Viren070
 + *
@@ -329,7 +329,11 @@ index 0000000..843b07a
 +#include <stdatomic.h>
 +#include <stdlib.h>
 +#include <string.h>
++#ifdef _WIN32
++#include <windows.h>
++#else
 +#include <unistd.h>
++#endif
 +
 +#include "ass_render.h"
 +
@@ -410,7 +414,13 @@ index 0000000..843b07a
 +
 +int ass_default_threads(void)
 +{
++#ifdef _WIN32
++    SYSTEM_INFO info;
++    GetSystemInfo(&info);
++    long cores = info.dwNumberOfProcessors;
++#else
 +    long cores = sysconf(_SC_NPROCESSORS_ONLN);
++#endif
 +    return FFMINMAX(cores, 1, MAX_DEFAULT_THREADS);
 +}
 +
