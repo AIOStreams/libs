@@ -40,5 +40,5 @@ v_dovi=d1abe0e27ff2c7ab3339614d06db9f8a058af6b2 # libdovi 3.4.0
 
 ## Our forks: the tagged commit and the upstream one it builds on
 v_ffmpeg=c0cd16a576c8a1c250b2600bd370db3ee54251cd # aiostreams-20261028.2, on 28fda48e0b
-v_libass=4edfaf6eedd36892d38e278d832d442e91ec613b # aiostreams-20261028, on f61db567e6, after 0.17.5
-v_mpv=fc2d1242d49c0fbb85496df7e447d3c2c0729b98 # aiostreams-20261028.2, on a9a08cd171
+v_libass=6fd011533a0eea1d8eefa656a60f73daf23531c5 # aiostreams-20261029, on f61db567e6, after 0.17.5
+v_mpv=2257f49820d113c16ccbad7846b410e149bdd5a4 # aiostreams-20261029, on a9a08cd171
