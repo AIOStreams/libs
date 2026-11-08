@@ -41,9 +41,10 @@ fetch_sdk () (
 
 toolchain () {
 	fetch_sdk
-	local api=21 cc
+	local api=21 cc flags=
 	case $arch in
-		armv7l) host=arm-linux-androideabi cc=armv7a-linux-androideabi$api ;;
+		# clang leaves 32-bit ARM code without the unwind tables crash backtraces need
+		armv7l) host=arm-linux-androideabi cc=armv7a-linux-androideabi$api flags=" -funwind-tables" ;;
 		arm64) host=aarch64-linux-android cc=$host$api ;;
 		x86) host=i686-linux-android cc=$host$api ;;
 		x86_64) host=x86_64-linux-android cc=$host$api ;;
@@ -53,7 +54,7 @@ toolchain () {
 	export ANDROID_HOME="$root/sdk/android-sdk-$os"
 	unset ANDROID_SDK_ROOT ANDROID_NDK_ROOT
 	export PATH="$(echo "$root/sdk/android-ndk-$v_ndk/toolchains/llvm/prebuilt/"*)/bin:$root/sdk/android-ndk-$v_ndk:$root/sdk/bin:$PATH"
-	export CC=$cc-clang CXX=$cc-clang++ AR=llvm-ar NM=llvm-nm RANLIB=llvm-ranlib STRIP=llvm-strip
+	export CC="$cc-clang$flags" CXX="$cc-clang++$flags" AR=llvm-ar NM=llvm-nm RANLIB=llvm-ranlib STRIP=llvm-strip
 	export LDFLAGS="-Wl,-O1,--icf=safe -Wl,-z,max-page-size=16384"
 	local family=${host%%-*}
 	[ $family = i686 ] && family=x86

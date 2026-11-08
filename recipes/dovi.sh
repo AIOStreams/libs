@@ -7,7 +7,7 @@ case $platform in
 			*) target=$host ;;
 		esac
 		rustup target add $target
-		linker=$(command -v $CC)
+		linker=$(command -v ${CC%% *})
 		target_var=$(echo $target | tr 'a-z-' 'A-Z_')
 		export CARGO_TARGET_${target_var}_LINKER="$linker"
 		export CC_${target//-/_}="$linker" AR_${target//-/_}=$AR
