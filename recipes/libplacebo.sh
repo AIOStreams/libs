@@ -13,6 +13,10 @@ case $platform in
 		)
 		;;
 esac
+# The program binary goes after the cache header, so it gets the buffer less the header.
+grep -qF 'buf_size - (GLint) sizeof(*header)' src/opengl/gpu_pass.c ||
+	${SED:-sed} -i 's/GetProgramBinary(pass_gl->program, buf_size,/GetProgramBinary(pass_gl->program, buf_size - (GLint) sizeof(*header),/' src/opengl/gpu_pass.c
+grep -qF 'buf_size - (GLint) sizeof(*header)' src/opengl/gpu_pass.c
 meson_build -Ddemos=false "${args[@]}"
 # Static linking needs the C++ library, which meson leaves out:
 # https://github.com/mesonbuild/meson/issues/11300
