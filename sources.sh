@@ -39,6 +39,6 @@ v_libplacebo=275f7dea27924cdd34ab2e6c20e448b6bc4fab65 # v7.387.0
 v_dovi=d1abe0e27ff2c7ab3339614d06db9f8a058af6b2 # libdovi 3.4.0
 
 ## Our forks: the tagged commit and the upstream one it builds on
-v_ffmpeg=ff5da22416a12f0e74cdc0400b65613132ab793c # aiostreams-20261106, on 28fda48e0b
+v_ffmpeg=9f0cc7afcc16f07bbc6d618367cbd14bf54e97b9 # aiostreams-20261116, on 4dbee3b241
 v_libass=6fd011533a0eea1d8eefa656a60f73daf23531c5 # aiostreams-20261029, on f61db567e6, after 0.17.5
-v_mpv=9aeb21d5b55ef3cc0877663621ca373055dfd5e6 # aiostreams-20261101, on a9a08cd171
+v_mpv=aeb726b441fd36b1ad4c2d34699e9e2ac0bb8a5f # aiostreams-20261116, on 543a8c2c59
