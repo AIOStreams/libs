@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/AIOStreams/libs/actions/workflows/build.yml/badge.svg?branch=library)](https://github.com/AIOStreams/libs/actions/workflows/build.yml)
 
-The native libraries [AIOStreams](https://github.com/Viren070/AIOStreams)' apps play video with: libmpv, with FFmpeg, libass, libplacebo and the libraries they use, for Android, Windows and macOS. Every source is pinned, and each push to `library` publishes all of it as one release. Our changes to mpv, FFmpeg and libass live in AIOStreams' forks of them ([below](#our-changes)).
+The native libraries [AIOStreams](https://github.com/Viren070/AIOStreams)' apps play video with: libmpv, with FFmpeg, libass, libplacebo and the libraries they use, for Android, Windows, macOS and Linux. Every source is pinned, and each push to `library` publishes all of it as one release. Our changes to mpv, FFmpeg and libass live in AIOStreams' forks of them ([below](#our-changes)).
 
 ## Releases
 
@@ -13,9 +13,12 @@ Each release is tagged `<yyyymmdd>-<commit>` and holds:
 | `libs-android.aar` | libmpv, FFmpeg, libass and libdovi for arm64-v8a, armeabi-v7a and x86_64, with a Kotlin API ([below](#the-android-library)), and each library's licence in `assets/licenses` | The Android app |
 | `libs-windows-<arch>.zip` | `libmpv-2.dll` and FFmpeg's DLLs for x86_64 and aarch64, and each library's licence in `licenses`. It imports `vulkan-1.dll`, which GPU drivers install | The desktop app on Windows |
 | `libs-macos-<arch>.zip` | `libmpv.2.dylib` with FFmpeg's and MoltenVK's dylibs for arm64 and x86_64, for macOS 11 and later, each finding the others beside it through `@rpath`, and each library's licence in `licenses` | The desktop app on macOS |
+| `libs-linux-<arch>.zip` | `libmpv.so.2` and FFmpeg's libraries for x86_64 and aarch64, for glibc 2.39 and later, each finding the others beside it, and each library's licence in `licenses`. They load libva, libdrm, EGL, PulseAudio, ALSA and fontconfig from the system | The desktop app on Linux |
 | `SHA256SUMS` | Every file's SHA-256 | |
 
 The release notes list the pinned version of each source. Each package's `licenses/index.json` lists its libraries with their pins and licence files, for the apps' licence pages.
+
+On Linux, libmpv has no X11 or Wayland code: it decodes with VA-API through the GPU's render node, which an app passes to the render API as `MPV_RENDER_PARAM_DRM_DISPLAY_V2` with `render_fd` set. Its TLS is Mbed TLS, which needs `tls-ca-file` pointed at the system's certificates.
 
 ## Layout
 
@@ -26,7 +29,7 @@ The release notes list the pinned version of each source. Each package's `licens
 | `scripts/<platform>.sh` | A platform's toolchain, architectures, which library needs which, and how its release file is packaged |
 | `build.sh` | Builds a platform for one architecture |
 | `android/` | The Gradle project the AAR is built with |
-| `docker/` | A container with the tools for the Android and Windows builds |
+| `docker/` | A container with the tools for the Android, Windows and Linux builds |
 
 ## Building
 
@@ -37,6 +40,7 @@ The release notes list the pinned version of each source. Each package's `licens
 For example `./build.sh windows x86_64` writes `out/libs-windows-x86_64.zip`. With a library, it builds only that library and what it needs, without packaging. Sources go in `deps/`, fetched again when their pins change, toolchains in `sdk/` and each build in `prefix/<platform>-<arch>/`. A library is rebuilt only when its recipe, pin, toolchain or one of the libraries it needs has changed, so a second run after a small change is quick; `--clean` starts its build folders over.
 
 - **Android and Windows** build on Linux, which needs autotools, pkg-config, meson, ninja, nasm, CMake and Python 3. The build downloads the Android SDK and NDK or [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) itself. Android also needs Java 21 and Rust. `docker/build.sh android arm64` runs a build in a container that has everything.
+- **Linux** builds on Ubuntu 24.04 for its own architecture, with those tools, GCC, patchelf, hwdata and the development packages of libva, libdrm, EGL, PulseAudio, ALSA and fontconfig. CI builds in a bare `ubuntu:24.04` container, so nothing else on the machine gets linked in.
 - **macOS** builds on a Mac with Xcode, Rust, CMake, Python 3, [cargo-c](https://github.com/lu-zero/cargo-c) and Homebrew's autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gnu-sed and coreutils.
 
 CI builds each platform and architecture in its own job and keeps each build's prefix in the cache, so a release rebuilds only what changed.

@@ -12,6 +12,7 @@ case $platform in
 			-Dvulkan-registry="$prefix_dir/share/vulkan/registry/vk.xml"
 		)
 		;;
+	linux) args=(-Dauto_features=disabled -D{opengl,gl-proc-addr,lcms,dovi}=enabled) ;;
 esac
 # The program binary goes after the cache header, so it gets the buffer less the header.
 grep -qF 'buf_size - (GLint) sizeof(*header)' src/opengl/gpu_pass.c ||
@@ -20,4 +21,6 @@ grep -qF 'buf_size - (GLint) sizeof(*header)' src/opengl/gpu_pass.c
 meson_build -Ddemos=false "${args[@]}"
 # Static linking needs the C++ library, which meson leaves out:
 # https://github.com/mesonbuild/meson/issues/11300
-${SED:-sed} -i '/^Libs:/ s|$| -lc++|' "$dest/lib/pkgconfig/libplacebo.pc"
+cxxlib=c++
+[ $platform = linux ] && cxxlib=stdc++
+${SED:-sed} -i "/^Libs:/ s|\$| -l$cxxlib|" "$dest/lib/pkgconfig/libplacebo.pc"

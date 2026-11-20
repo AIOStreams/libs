@@ -43,7 +43,8 @@ mkdir -p "$prefix_dir" "$root/out"
 unset CC CXX CPATH LIBRARY_PATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
 toolchain
 export host
-export PKG_CONFIG_SYSROOT_DIR="$prefix_dir" PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig"
+export PKG_CONFIG_SYSROOT_DIR="$prefix_dir"
+export PKG_CONFIG_LIBDIR="$prefix_dir/usr/local/lib/pkgconfig${system_pkg_config:+:$system_pkg_config}"
 unset PKG_CONFIG_PATH
 
 # A library's licences in prefix/licenses/<name>, with those of the projects it vendors.

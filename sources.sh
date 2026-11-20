@@ -37,6 +37,7 @@ v_spirv_headers=04fd3caa1e8267e4d95c806cad901181728e1006
 v_dav1d=54706fc6bc0cdecab7e9593974a4039cc038fca7 # 1.5.4
 v_libplacebo=275f7dea27924cdd34ab2e6c20e448b6bc4fab65 # v7.387.0
 v_dovi=d1abe0e27ff2c7ab3339614d06db9f8a058af6b2 # libdovi 3.4.0
+v_libdisplay_info=c67a3e9bedb05ab61c7443704a1a107e76254595 # 0.4.0
 
 ## Our forks: the tagged commit and the upstream one it builds on
 v_ffmpeg=9f0cc7afcc16f07bbc6d618367cbd14bf54e97b9 # aiostreams-20261116, on 4dbee3b241

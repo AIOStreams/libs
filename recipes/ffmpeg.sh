@@ -85,6 +85,14 @@ case $platform in
 			--install-name-dir=/usr/local/lib
 		)
 		;;
+	linux)
+		args+=(
+			--target-os=linux --arch=$arch --enable-pic --pkg-config-flags=--static --disable-avdevice
+			--extra-cflags="-I$prefix_dir/include" --extra-ldflags="-L$prefix_dir/lib"
+			# Nothing from the build machine but what's named, threads included
+			--disable-autodetect --enable-{pthreads,iconv,zlib,mbedtls,vaapi,libdrm,ffnvcodec,nvdec}
+		)
+		;;
 esac
 # The AC-3 encoder queues its frames, which configure doesn't select for it.
 grep -q '^ac3_encoder_select=.*audio_frame_queue' ../configure ||

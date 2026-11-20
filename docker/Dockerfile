@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     autoconf automake autopoint bison build-essential clang cmake curl flex gettext git gperf \
     help2man libtool libtool-bin lld nasm ninja-build openjdk-21-jdk pkg-config python3 \
     python3-pip texinfo unzip yasm zip \
+    patchelf hwdata libva-dev libdrm-dev libegl-dev libpulse-dev libasound2-dev libfontconfig-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 # mbedtls' generators need jsonschema and jinja2.
 RUN pip3 install --break-system-packages meson==1.12.1 jsonschema jinja2

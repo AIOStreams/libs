@@ -17,6 +17,14 @@ case $platform in
 			-D{c,objc}_link_args=-Wl,-headerpad_max_install_names
 		)
 		;;
+	linux)
+		# VA-API through the render node the app passes, not X11 or Wayland.
+		args=(
+			-Dauto_features=disabled -Dlua=luajit
+			-D{iconv,uchardet,lcms2,zlib,vector,egl,plain-gl,drm,vaapi,vaapi-drm,cuda-hwaccel,cuda-interop}=enabled
+			-D{pulse,alsa}=enabled
+		)
+		;;
 esac
 meson_setup --default-library shared -Dlibmpv=true -Dcplayer=false -Dmanpage-build=disabled "${args[@]}"
 ninja -C $build_dir -j$cores

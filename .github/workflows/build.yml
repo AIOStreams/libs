@@ -67,8 +67,44 @@ jobs:
           path: out/*
           compression-level: 0
 
+  linux:
+    name: linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # A bare system, so libmpv finds only the system libraries installed here.
+    container: ubuntu:24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - name: Install the build tools and the system libraries
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends autoconf automake libtool make gcc g++ pkg-config \
+            ninja-build nasm cmake git curl ca-certificates python3 python3-pip xz-utils bzip2 patchelf hwdata \
+            libva-dev libdrm-dev libegl-dev libpulse-dev libasound2-dev libfontconfig-dev
+          pip3 install --break-system-packages meson==1.12.1 jsonschema jinja2
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/cache@v6
+        with:
+          path: prefix/linux-${{ matrix.arch }}
+          key: linux-${{ matrix.arch }}-${{ hashFiles('sources.sh', 'build.sh', 'scripts/**', 'recipes/**') }}
+          restore-keys: linux-${{ matrix.arch }}-
+
+      - name: Build
+        run: ./build.sh linux ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}
+          path: out/*
+          compression-level: 0
+
   release:
-    needs: build
+    needs: [build, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -86,7 +122,7 @@ jobs:
           unzip -q built/android-arm64/libs-android.aar -d joined
           for arch in armv7l x86_64; do unzip -q -o built/android-$arch/libs-android.aar 'jni/*' -d joined; done
           (cd joined && zip -q -r -X ../out/libs-android.aar .)
-          cp built/{windows,macos}-*/*.zip out/
+          cp built/{windows,macos,linux}-*/*.zip out/
           (cd out && sha256sum * | tee SHA256SUMS)
 
       - uses: actions/upload-artifact@v7

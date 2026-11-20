@@ -36,6 +36,7 @@ fetch () (
 		harfbuzz) unpack $1.part J https://github.com/harfbuzz/harfbuzz/releases/download/$v_harfbuzz/harfbuzz-$v_harfbuzz.tar.xz ;;
 		lcms2) unpack $1.part z https://github.com/mm2/Little-CMS/releases/download/lcms$v_lcms2/lcms2-$v_lcms2.tar.gz ;;
 		libass) clone_at $1.part https://github.com/AIOStreams/libass $v_libass ;;
+		libdisplay-info) clone_at $1.part https://gitlab.freedesktop.org/emersion/libdisplay-info.git $v_libdisplay_info ;;
 		libiconv) unpack $1.part z https://ftp.gnu.org/pub/gnu/libiconv/libiconv-$v_libiconv.tar.gz ;;
 		libplacebo) clone_at $1.part https://github.com/haasn/libplacebo $v_libplacebo ;;
 		libxml2) unpack $1.part z https://gitlab.gnome.org/GNOME/libxml2/-/archive/v$v_libxml2/libxml2-v$v_libxml2.tar.gz ;;

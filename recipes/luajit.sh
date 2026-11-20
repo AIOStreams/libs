@@ -3,6 +3,7 @@ make clean
 case $platform in
 	windows) args=(HOST_CC=cc CROSS=$host- CC=clang TARGET_SYS=Windows) ;;
 	macos) args=(HOST_CC=clang CC=clang TARGET_FLAGS="${CC#* }" TARGET_SYS=Darwin) ;;
+	linux) args=(TARGET_FLAGS="${CC#* }") ;;
 esac
 make -j$cores "${args[@]}" BUILDMODE=static amalg
 # Its install target knows neither Windows nor a separate destination.
