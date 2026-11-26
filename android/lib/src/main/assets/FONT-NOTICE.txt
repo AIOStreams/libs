@@ -1,0 +1,6 @@
+Droid Sans Fallback Regular 2.56
+Digitized data copyright Google Corporation © 2006
+Apache License, Version 2.0. See Apache-2.0.txt.
+
+Modified to remove unintended holam and sheva components from the base lamed and final kaf glyphs and restore their full Unicode mapping.
+Original font at https://github.com/AIOStreams/libs/blob/library/android/lib/src/main/assets/subfont.ttf
